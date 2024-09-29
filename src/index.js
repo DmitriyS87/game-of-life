@@ -1,9 +1,17 @@
 let updateDisplayEl;
 let nextTimeout;
 
-const BASE_UPDATE_FPS = 60;
+/* SETTINGS */
+const GAME_MAIN_CONTAINER = "game__screen";
+const GAME_ALIVE_COLOR = "blue";
+const GAME_DEAD_COLOR = "#f5f5f5";
+const GAME_AREA_SIZE_X = 640;
+const GAME_AREA_SIZE_Y = 640;
+const GAME_CANVAS_WIDTH_DEFAULT = 640;
+const GAME_CANVAS_HEIGHT_DEFAULT = 640;
+
+const BASE_UPDATE_FPS = 1;
 const DISPLAY_SPEED_DELAY = 300;
-const POINT_COLOR_DEFAULT = "#f5f5f5";
 
 const nextSceneRenderDelay = Math.round(1000 / BASE_UPDATE_FPS);
 
@@ -30,21 +38,17 @@ const extendOffscreenCanvas = ($canvas, name) => {
 
 const cordToKey = (x, y) => `${x}:${y}`;
 const keyToCords = (key) => key.split(":");
-
-
-// const getMaxValue = () => {
-//     let maxValue = 0;
-//     return (value, clear) => {
-//         if (clear) maxValue = 0;
-//         if (value > maxValue) {
-//             maxValue = value;
-//         }
-//         return maxValue;
-//     }
-// }
-
 const roundToDecimal = (num, dec = 1) =>
   Math.round(num * 10 ** dec) / 10 ** dec;
+const fixBorderCoords = (x, min = 0, max) => {
+  if (x < min) {
+    return max + x;
+  }
+  if (x >= max) {
+    return x - max;
+  }
+  return x;
+};
 
 const getColor = () =>
   `rgb(${Math.round(Math.random() * 255)}, ${Math.round(
@@ -58,7 +62,7 @@ class Point {
     this.y = y;
     this.dx = dx;
     this.dy = dy;
-    this.color = color ?? POINT_COLOR_DEFAULT;
+    this.color = color;
     this.ctxWidth = ctx.canvas.width;
     this.ctxHeight = ctx.canvas.height;
   }
@@ -80,62 +84,30 @@ class Point {
     ctx.restore();
   }
 
-  correctToBorders() {
-    if (this.x + this.dx > this.ctxWidth) {
-      this.x = 0;
-    }
-    if (this.y + this.dy > this.ctxHeight) {
-      this.y = 0;
-    }
-    if (this.x < 0) {
-      this.x = this.ctxWidth;
-    }
-    if (this.y < 0) {
-      this.y = this.ctxHeight;
-    }
-  }
-
   update(params) {
     this.clear();
     [...Object.keys(params)].forEach((key) => (this[key] = params[key]));
-    this.correctToBorders();
     this.draw();
   }
 }
-
-const includeFieldWithNeighbors = (x, y) => {
-  const result = [];
-  [-1, 0, 1].forEach((i) => {
-    [-1, 0, 1].forEach((j) => {
-      result.push(`${Number(x) + i}:${Number(y) + j}`);
-    });
-  });
-  return result;
-};
-
-const fixBorderCoords = (x, min = 0, max) => {
-  if (x <= min) {
-    return max + x;
-  }
-  if (x > max) {
-    return x - max;
-  }
-  return x;
-};
 
 const getNeighborsCords = (x, y, maxX, maxY) => {
   const result = [];
   [-1, 0, 1].forEach((i) => {
     [-1, 0, 1].forEach((j) => {
-      if (i !== 0 && j !== 0) {
-        result.push(`${fixBorderCoords(Number(x) + i, 0, maxX)}:${fixBorderCoords(Number(y) + j, 0, maxY)}`);
+      if (!(i === 0 && j === 0)) {
+        result.push(
+          `${fixBorderCoords(Number(x) + i, 0, maxX)}:${fixBorderCoords(
+            Number(y) + j,
+            0,
+            maxY
+          )}`
+        );
       }
     });
   });
   return result;
 };
-
-
 
 class Game {
   screenPadding = {
@@ -143,11 +115,11 @@ class Game {
     tB: 16,
   };
   defaultCanvasSize = {
-    width: 640,
-    height: 480,
+    width: GAME_CANVAS_WIDTH_DEFAULT,
+    height: GAME_CANVAS_HEIGHT_DEFAULT,
   };
-  aliveColor = "red";
-  deadColor = "gray";
+  aliveColor = GAME_ALIVE_COLOR;
+  deadColor = GAME_DEAD_COLOR;
 
   constructor({ sizeX, sizeY, container }) {
     this.container = container;
@@ -156,10 +128,10 @@ class Game {
     this.fields = {};
     this.bgRenderMode = 0;
     this.history = [];
-    this.defaultStateMatrix = Array.from({ length: sizeY }, () =>
-      Array(sizeX).fill(0)
+    this.defaultStateMatrix = Array.from({ length: sizeY - 1 }, () =>
+      Array(sizeX - 1).fill(0)
     );
-    this.aliveCordsSet = null;
+    this.aliveCordsSet = new Set();
     this.stateMatrix = [];
     this.updateMatrix = [];
     this.rules = {
@@ -171,8 +143,6 @@ class Game {
         maxAlive: 3,
       },
     };
-
-    this.init();
   }
 
   createCanvasElement({ cn }) {
@@ -255,6 +225,29 @@ class Game {
           return;
       }
     });
+    document.addEventListener("click", (e) => {
+      if (this._$container.contains(e.target)) {
+        e.stopPropagation();
+        e.preventDefault();
+        const x = e.offsetX;
+        const y = e.offsetY;
+        this.handleGameAreaClick({ x, y });
+      }
+    });
+  }
+
+  handleGameAreaClick({ x, y }) {
+    const targetX = Math.floor(x / this._fieldWidth);
+    const targetY = Math.floor(y / this._fieldHeight);
+    const targetCords = cordToKey(targetX, targetY);
+    const target = this.fields[targetCords];
+    const isAlive = this.aliveCordsSet.has(targetCords);
+    target.update({ color: isAlive ? this.deadColor : this.aliveColor });
+    if (isAlive) {
+      this.aliveCordsSet.delete(targetCords);
+    } else {
+      this.aliveCordsSet.add(targetCords);
+    }
   }
 
   init() {
@@ -267,18 +260,18 @@ class Game {
 
   createFields() {
     const { ctx, sizeX, sizeY, width, height } = this;
-    this._pointWidth = roundToDecimal(width / sizeX);
-    this._pointHeight = roundToDecimal(height / sizeY);
+    this._fieldWidth = roundToDecimal(width / sizeX);
+    this._fieldHeight = roundToDecimal(height / sizeY);
     for (let x = 0; x < sizeX; x++) {
       for (let y = 0; y < sizeY; y++) {
-        const positionX = x * this._pointWidth;
-        const positionY = y * this._pointHeight;
+        const positionX = x * this._fieldWidth;
+        const positionY = y * this._fieldHeight;
         this.fields[`${x}:${y}`] = new Point(
           ctx.layer,
           positionX,
           positionY,
-          this._pointWidth,
-          this._pointHeight,
+          this._fieldWidth,
+          this._fieldHeight,
           getColor()
         );
       }
@@ -297,11 +290,8 @@ class Game {
       return row.map((el, y) => {
         const val = Math.random() < 0.9 ? 0 : 1;
         if (val === 1) this.aliveCordsSet.add(cordToKey(x, y));
-        // if (val) this.updateMatrix.push({ [cordToKey(row, el)]: 1 });
       });
     });
-
-    console.log("generate", { initial: this.aliveCordsSet });
     this.setState("renderGenerated");
   }
 
@@ -312,12 +302,12 @@ class Game {
       const [x, y] = keyToCords(cords);
       const neighbors = getNeighborsCords(x, y, this.sizeX, this.sizeY);
       neighbors.forEach((cords) => {
-        if (!countedNeighbors[cords]) {
-          countedNeighbors[cords] = 0
+        if (countedNeighbors[cords] === undefined) {
+          countedNeighbors[cords] = 0;
         }
-        countedNeighbors[cords]++
-      })
-    })
+        countedNeighbors[cords]++;
+      });
+    });
     for (const [cords, count] of Object.entries(countedNeighbors)) {
       const isAlive = this.aliveCordsSet.has(cords);
       if (isAlive) {
@@ -337,7 +327,7 @@ class Game {
 
   clearLayer() {
     const ctx = this.ctx.layer;
-    ctx.clearRect(0,0, this.width, this.height);
+    ctx.clearRect(0, 0, this.width, this.height);
   }
 
   renderLayer(aliveCords) {
@@ -346,7 +336,7 @@ class Game {
     aliveCords.forEach((cords) => {
       const field = this.fields[cords];
       field.draw({ ctx, color: this.aliveColor });
-    })
+    });
   }
 
   draw() {
@@ -359,7 +349,7 @@ class Game {
     const startTime = Date.now();
     this.generateNext();
     const countingTime = (Date.now() - startTime).toFixed(3) + " ms";
-    console.log("countingTime:  ", countingTime)
+    console.log("countingTime:  ", countingTime);
     this.clearLayer();
     this.renderLayer(this.aliveCordsSet);
     if (this.aliveCordsSet.size === 0) {
@@ -394,9 +384,7 @@ class Game {
       this.draw();
     }
   }
-  togglePoint() {
-
-  }
+  togglePoint() {}
 }
 
 const initControlPanel = () => {
@@ -471,7 +459,11 @@ const initGame = () => {
       noOftenThan(printUpdateTime, DISPLAY_SPEED_DELAY)
     );
 
-    const game = new Game({ sizeX: 20, sizeY: 20, container: "game__screen" });
+    const game = new Game({
+      sizeX: GAME_AREA_SIZE_X,
+      sizeY: GAME_AREA_SIZE_Y,
+      container: GAME_MAIN_CONTAINER,
+    });
     game.init();
     // have to move it inside game
     const render = () => {

@@ -25,7 +25,7 @@ body {
 
 .game {
   border-radius: 16px;
-  min-height: 640px;
+  min-height: 760px;
   min-width: 640px;
   background: #eeeeee;
   box-shadow: 2px 6px 20px 0 #616161;
