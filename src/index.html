@@ -1,13 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="style.css">
-    <script src="index.js"></script>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>The Game of Life</title>
-</head>
-<body>
-    <div class="layout"></div>
-</body>
+    <link rel="stylesheet" href="style.css" />
+    <script src="index.js"></script>
+  </head>
+  <body>
+    <div class="layout">
+      <div class="game">
+        <div class="game__controls">
+            <div class="main-controls">
+              <button class="ctrl-btn start">Start</button>
+              <button class="ctrl-btn pause">Pause</button>
+              <button class="ctrl-btn finish">Finish</button>
+            </div>
+            <div class="first-generation-controls">
+              <code>Click point to add to the first generation</code>
+              <button class="ctrl-btn generate">Generate</button>
+            </div>
+            
+            <div class="update-time"></div>
+        </div>
+        <div class="game__screen">
+        </div>
+      </div>
+    </div>
+  </body>
 </html>
