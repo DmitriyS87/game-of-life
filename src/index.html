@@ -10,21 +10,55 @@
   <body>
     <div class="layout">
       <div class="game">
-        <div class="game__controls">
-            <div class="main-controls">
-              <button class="ctrl-btn start">Start</button>
-              <button class="ctrl-btn pause">Pause</button>
-              <button class="ctrl-btn finish">Finish</button>
-            </div>
-            <div class="first-generation-controls">
-              <code>Click point to add to the first generation</code>
-              <button class="ctrl-btn generate">Generate</button>
-            </div>
-            
-            <div class="update-time"></div>
-        </div>
         <div class="game__screen">
+          <div class="game-section">
+            <h1 class="game-title">The Game of Life:</h1>
+          </div>
+          <div class="game-screen"></div>
         </div>
+        <form class="game__controls" action="#">
+          <section class="game-section game-size">
+            <label for="game-size"
+              ><h2 class="game-size__title">Size selector:</h2></label
+            >
+            <input
+              class="game-size__input"
+              id="game-size"
+              type="number"
+              placeholder="set cells count"
+            />
+          </section>
+          <section class="game-section game-generation">
+            <h2 class="sr-only">First generation setup</h2>
+            <p class="game-generation__description">
+              You can manage first generation by mouse. Just click cell to
+              toggle it. Or you can just generate random scene with button
+              above:
+            </p>
+            <div class="game-generation__controls">
+              <input
+                type="button"
+                class="ctrl-btn ctrl-btn--full-width generate"
+                value="Generate"
+              />
+              <input
+                type="button"
+                class="reset ctrl-btn ctrl-btn--full-width ctrl-btn--reset"
+                value="Reset"
+              />
+            </div>
+          </section>
+          <section class="game-section game-section--runtime-values">
+            <h2 class="sr-only">Runtime game stats</h2>
+            <p class="game-stats">Generation Number: <span class="game-stats__value generation-number"></span></p>
+            <p class="game-stats">Alive count: <span class="game-stats__value generation-alive-count"></span></p>
+            <p class="game-stats">Computed time: <span class="game-stats__value generation-computed"></span></p>
+            <p class="game-stats">FPS: <span class="game-stats__value update-time"></span></p>
+          </section>
+          <input type="submit" class="ctrl-btn ctrl-btn--start start" value="Start" />
+          <input type="button" class="visually-hidden ctrl-btn ctrl-btn--stop stop" value="Stop" />
+          <div class="first-generation-controls"></div>
+        </form>
       </div>
     </div>
   </body>

@@ -2,16 +2,18 @@ let updateDisplayEl;
 let nextTimeout;
 
 /* SETTINGS */
-const GAME_MAIN_CONTAINER = "game__screen";
+const GAME_MAIN_CONTAINER_SELECTOR = ".game-screen";
 const GAME_ALIVE_COLOR = "blue";
 const GAME_DEAD_COLOR = "#f5f5f5";
-const GAME_AREA_SIZE_X = 640;
-const GAME_AREA_SIZE_Y = 640;
+const GAME_AREA_SIZE_X = 30;
+const GAME_AREA_SIZE_Y = 30;
 const GAME_CANVAS_WIDTH_DEFAULT = 640;
 const GAME_CANVAS_HEIGHT_DEFAULT = 640;
 
-const BASE_UPDATE_FPS = 1;
+const BASE_UPDATE_FPS = 8;
 const DISPLAY_SPEED_DELAY = 300;
+
+const HIDDEN_CLASS = "visually-hidden";
 
 const nextSceneRenderDelay = Math.round(1000 / BASE_UPDATE_FPS);
 
@@ -48,6 +50,37 @@ const fixBorderCoords = (x, min = 0, max) => {
     return x - max;
   }
   return x;
+};
+
+const hideElement = (el) => {
+  el.classList.add(HIDDEN_CLASS);
+};
+const unHideElement = (el) => {
+  el.classList.remove(HIDDEN_CLASS);
+};
+const disableElement = (el) => {
+  el.setAttribute("disabled", true);
+};
+const enableElement = (el) => {
+  el.removeAttribute("disabled");
+};
+const printTextToEl = (text, el) => {
+  el.innerText = text;
+};
+const noOftenThan = (cb, delta = 0) => {
+  let lastTime = Date.now();
+  return (args) => {
+    const now = Date.now();
+    if (now - lastTime < delta) {
+      return;
+    }
+    lastTime = now;
+    return cb(args);
+  };
+};
+const printUpdateTime = (timeDelta) => {
+  const fps = (1000 / timeDelta).toFixed(1);
+  updateDisplayEl.innerText = fps;
 };
 
 const getColor = () =>
@@ -128,12 +161,14 @@ class Game {
     this.fields = {};
     this.bgRenderMode = 0;
     this.history = [];
-    this.defaultStateMatrix = Array.from({ length: sizeY - 1 }, () =>
-      Array(sizeX - 1).fill(0)
+    this.defaultStateMatrix = Array.from({ length: sizeY }, () =>
+      Array(sizeX).fill(0)
     );
     this.aliveCordsSet = new Set();
     this.stateMatrix = [];
     this.updateMatrix = [];
+    this.currentGeneration = 0;
+    this.generationTime = 0;
     this.rules = {
       0: {
         aliveMinCount: 3,
@@ -145,24 +180,29 @@ class Game {
     };
   }
 
+  get getGenerationInfo() {
+    return {
+      current: this.currentGeneration,
+      time: this.generationTime,
+      aliveCount: this.aliveCount,
+    };
+  }
+
   createCanvasElement({ cn }) {
-    const $background = document.createElement("canvas");
-    $background.classList.add(cn);
-    $background.innerHTML = `Your browser doesn't appear to support the HTML5
+    const $layer = document.createElement("canvas");
+    $layer.classList.add(cn);
+    $layer.innerHTML = `Your browser doesn't appear to support the HTML5
     <code>&lt;canvas&gt;</code> element.
     `;
-    this._$container.appendChild($background);
-    return $background;
+    this._$container.appendChild($layer);
+    return $layer;
   }
 
   createCanvas() {
-    this._$container = document.querySelector(".game__screen");
+    this._$container = document.querySelector(this.container);
     const { width, height } = this._$container.getBoundingClientRect();
-    const gameWidth =
-      Math.max(width, this.defaultCanvasSize.width) - this.screenPadding.xY * 2;
-    const gameHeight =
-      Math.max(height, this.defaultCanvasSize.height) -
-      this.screenPadding.tB * 2;
+    const gameWidth = Math.max(width, this.defaultCanvasSize.width) - 6;
+    const gameHeight = Math.max(height, this.defaultCanvasSize.height) - 6;
     this.bgCanvas = this.createCanvasElement({
       cn: "game-background",
     });
@@ -204,17 +244,17 @@ class Game {
   }
 
   initEventListeners() {
-    document.addEventListener("life-game-event", (e) => {
+    document.addEventListener("life-game-event-controls", (e) => {
       e.stopPropagation();
       switch (e?.detail?.action) {
         case "start":
           this.start();
           return;
-        case "pause":
+        case "stop":
           this.pause();
           return;
-        case "finish":
-          this.finish();
+        case "reset":
+          this.reset();
           return;
         case "generate":
           this.generate();
@@ -256,6 +296,33 @@ class Game {
     this.prepareBgCache();
     this.renderBg();
     this.initEventListeners();
+    this.renderLoop();
+  }
+
+  renderCounter = getRenderTimeCounter(noOftenThan(printUpdateTime, DISPLAY_SPEED_DELAY));
+
+  printFPS(timeRendered) {
+    if (this.state === "play") {
+      this.renderCounter(timeRendered)
+    }
+  }
+
+  renderLoop() {
+    const render = () => {
+      this.updateGameScreen();
+
+      nextTimeout = setTimeout(
+        () =>
+          requestAnimationFrame((timeRendered) => {
+            clearTimeout(nextTimeout);
+            this.printFPS(timeRendered);
+            render();
+          }),
+        nextSceneRenderDelay
+      );
+    };
+
+    render();
   }
 
   createFields() {
@@ -282,13 +349,15 @@ class Game {
     const { ctx, width, height } = this;
     ctx.bg.clearRect(0, 0, width, height);
     ctx.layer.clearRect(0, 0, width, height);
+    // ! проверить необходимость сброса тут
+    this.currentGeneration = 0;
   }
 
   createRandomFirstGeneration() {
     this.aliveCordsSet = new Set();
     this.stateMatrix = [...this.defaultStateMatrix].map((row, x) => {
       return row.map((el, y) => {
-        const val = Math.random() < 0.9 ? 0 : 1;
+        const val = Math.random() < 0.6 ? 0 : 1;
         if (val === 1) this.aliveCordsSet.add(cordToKey(x, y));
       });
     });
@@ -296,6 +365,7 @@ class Game {
   }
 
   generateNext() {
+    this.currentGeneration++;
     const newAliveSet = new Set();
     const countedNeighbors = {};
     this.aliveCordsSet.forEach((cords) => {
@@ -323,11 +393,18 @@ class Game {
       }
     }
     this.aliveCordsSet = newAliveSet;
+    this.aliveCount = newAliveSet.size;
   }
 
   clearLayer() {
     const ctx = this.ctx.layer;
     ctx.clearRect(0, 0, this.width, this.height);
+  }
+
+  reset() {
+    this.clearLayer();
+    this.aliveCordsSet = new Set();
+    this.currentGeneration = 0;
   }
 
   renderLayer(aliveCords) {
@@ -345,11 +422,15 @@ class Game {
     this.renderLayer(this.aliveCordsSet);
   }
 
-  updateScene() {
+  countRunTime(fn) {
     const startTime = Date.now();
-    this.generateNext();
-    const countingTime = (Date.now() - startTime).toFixed(3) + " ms";
-    console.log("countingTime:  ", countingTime);
+    fn();
+    return Date.now() - startTime;
+  }
+
+  updateScene() {
+    this.generationTime = this.countRunTime(this.generateNext.bind(this));
+    this.onNextGeneration();
     this.clearLayer();
     this.renderLayer(this.aliveCordsSet);
     if (this.aliveCordsSet.size === 0) {
@@ -385,45 +466,88 @@ class Game {
     }
   }
   togglePoint() {}
+
+  onNextGeneration() {
+    const newGenerationEvent = new CustomEvent("life-game-runtime-event", {
+      detail: {
+        type: "new-generation",
+        data: this.getGenerationInfo,
+      },
+    });
+    document.dispatchEvent(newGenerationEvent);
+  }
 }
 
 const initControlPanel = () => {
+  /* control elements */
   const startBtn = document.querySelector(".ctrl-btn.start");
-  const pauseBtn = document.querySelector(".ctrl-btn.pause");
-  const finishBtn = document.querySelector(".ctrl-btn.finish");
+  const stopBtn = document.querySelector(".ctrl-btn.stop");
+  const resetBtn = document.querySelector(".ctrl-btn.reset");
   const generateBtn = document.querySelector(".ctrl-btn.generate");
+  const gameControlsForm = document.querySelector(".game__controls");
 
-  const startEvent = new CustomEvent("life-game-event", {
+  /* display elements */
+  updateDisplayEl = document.querySelector(".update-time");
+  const generationNumber = document.querySelector(".generation-number");
+  const generationComputedTime = document.querySelector(".generation-computed");
+  const generationAliveCount = document.querySelector(
+    ".generation-alive-count"
+  );
+  const startEvent = new CustomEvent("life-game-event-controls", {
     detail: {
       action: "start",
     },
   });
-  const pauseEvent = new CustomEvent("life-game-event", {
+  const stopEvent = new CustomEvent("life-game-event-controls", {
     detail: {
-      action: "pause",
+      action: "stop",
     },
   });
-  const finishEvent = new CustomEvent("life-game-event", {
+  const resetEvent = new CustomEvent("life-game-event-controls", {
     detail: {
-      action: "finish",
+      action: "reset",
     },
   });
-  const generateEvent = new CustomEvent("life-game-event", {
+  const generateEvent = new CustomEvent("life-game-event-controls", {
     detail: {
       action: "generate",
     },
   });
 
-  startBtn.addEventListener("click", () => document.dispatchEvent(startEvent));
-  pauseBtn.addEventListener("click", () => document.dispatchEvent(pauseEvent));
-  finishBtn.addEventListener("click", () =>
-    document.dispatchEvent(finishEvent)
-  );
+  gameControlsForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    document.dispatchEvent(startEvent);
+    hideElement(startBtn);
+    unHideElement(stopBtn);
+    disableElement(startBtn);
+  });
+  stopBtn.addEventListener("click", () => {
+    document.dispatchEvent(stopEvent);
+    hideElement(stopBtn);
+    enableElement(startBtn);
+    unHideElement(startBtn);
+  });
+
+  resetBtn.addEventListener("click", () => document.dispatchEvent(resetEvent));
   generateBtn.addEventListener("click", () =>
     document.dispatchEvent(generateEvent)
   );
+  document.addEventListener("life-game-runtime-event", (e) => {
+    e.stopPropagation();
+    switch (e?.detail?.type) {
+      case "new-generation":
+        const { current, time, aliveCount } = e.detail.data;
+        printTextToEl(current, generationNumber);
+        printTextToEl(time + " ms", generationComputedTime);
+        printTextToEl(aliveCount, generationAliveCount);
+        return;
 
-  updateDisplayEl = document.querySelector(".update-time");
+      default:
+        console.error("unhandled game event!");
+        return;
+    }
+  });
   /* 
 ACTIONS
 start btn
@@ -439,48 +563,32 @@ time shift between generation
 
 const initGame = () => {
   try {
-    const printUpdateTime = (timeDelta) => {
-      updateDisplayEl.innerText = timeDelta.toFixed(1) + "ms";
-    };
-
-    const noOftenThan = (cb, delta = 0) => {
-      let lastTime = Date.now();
-      return (args) => {
-        const now = Date.now();
-        if (now - lastTime < delta) {
-          return;
-        }
-        lastTime = now;
-        return cb(args);
-      };
-    };
-
-    const printTime = getRenderTimeCounter(
+    const printFPS = getRenderTimeCounter(
       noOftenThan(printUpdateTime, DISPLAY_SPEED_DELAY)
     );
 
     const game = new Game({
       sizeX: GAME_AREA_SIZE_X,
       sizeY: GAME_AREA_SIZE_Y,
-      container: GAME_MAIN_CONTAINER,
+      container: GAME_MAIN_CONTAINER_SELECTOR,
     });
     game.init();
     // have to move it inside game
-    const render = () => {
-      game.updateGameScreen();
+    // const render = () => {
+    //   game.updateGameScreen();
 
-      nextTimeout = setTimeout(
-        () =>
-          requestAnimationFrame((timeRendered) => {
-            clearTimeout(nextTimeout);
-            printTime(timeRendered);
-            render();
-          }),
-        nextSceneRenderDelay
-      );
-    };
+    //   nextTimeout = setTimeout(
+    //     () =>
+    //       requestAnimationFrame((timeRendered) => {
+    //         clearTimeout(nextTimeout);
+    //         printFPS(timeRendered);
+    //         render();
+    //       }),
+    //     nextSceneRenderDelay
+    //   );
+    // };
 
-    render();
+    // render();
   } catch (e) {
     throw new Error(`Can't setup canvas. ${e}`);
   }
