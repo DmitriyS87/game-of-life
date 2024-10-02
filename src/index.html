@@ -11,22 +11,23 @@
     <div class="layout">
       <div class="game">
         <div class="game__screen">
-          <div class="game-section">
-            <h1 class="game-title">The Game of Life:</h1>
-          </div>
           <div class="game-screen"></div>
         </div>
         <form class="game__controls" action="#">
+          <div class="game-section">
+            <h1 class="game-title">The Game of Life:</h1>
+          </div>
           <section class="game-section game-size">
+            <h3 class="sr-only">Game area size controller</h3>
             <label for="game-size"
-              ><h2 class="game-size__title">Size selector:</h2></label
-            >
-            <input
-              class="game-size__input"
-              id="game-size"
-              type="number"
-              placeholder="set cells count"
-            />
+              ><span class="game-size__title">Cells count:</span>
+            </label>
+              <input
+                class="game-size__input"
+                id="game-size"
+                type="text"
+                placeholder=""
+              />
           </section>
           <section class="game-section game-generation">
             <h2 class="sr-only">First generation setup</h2>
@@ -50,13 +51,36 @@
           </section>
           <section class="game-section game-section--runtime-values">
             <h2 class="sr-only">Runtime game stats</h2>
-            <p class="game-stats">Generation Number: <span class="game-stats__value generation-number"></span></p>
-            <p class="game-stats">Alive count: <span class="game-stats__value generation-alive-count"></span></p>
-            <p class="game-stats">Computed time: <span class="game-stats__value generation-computed"></span></p>
-            <p class="game-stats">FPS: <span class="game-stats__value update-time"></span></p>
+            <p class="game-stats">
+              Generation Number:
+              <span class="game-stats__value generation-number"></span>
+            </p>
+            <p class="game-stats">
+              Alive count:
+              <span class="game-stats__value generation-alive-count"></span>
+            </p>
+            <p class="game-stats">
+              Computed time:
+              <span class="game-stats__value generation-computed"></span>
+            </p>
+            <p class="game-stats">
+              Render time:
+              <span class="game-stats__value generation-render-time"></span>
+            </p>
+            <p class="game-stats">
+              FPS: <span class="game-stats__value update-time"></span>
+            </p>
           </section>
-          <input type="submit" class="ctrl-btn ctrl-btn--start start" value="Start" />
-          <input type="button" class="visually-hidden ctrl-btn ctrl-btn--stop stop" value="Stop" />
+          <input
+            type="submit"
+            class="ctrl-btn ctrl-btn--start start"
+            value="Start"
+          />
+          <input
+            type="button"
+            class="visually-hidden ctrl-btn ctrl-btn--stop stop"
+            value="Stop"
+          />
           <div class="first-generation-controls"></div>
         </form>
       </div>
