@@ -62,7 +62,7 @@ body {
 .game__controls {
   display: flex;
   flex-direction: column;
-  min-width: 340px;
+  min-width: 280px;
   padding: 16px 12px;
   gap: 16px;
 }
@@ -145,9 +145,6 @@ body {
   color: rgb(238, 174, 202);
 }
 
-.game-generation {
-}
-
 .game-generation__description {
   line-height: 1.25;
   padding: 0;
@@ -170,7 +167,6 @@ body {
   -webkit-text-fill-color: transparent;
   display: flex;
   justify-content: space-between;
-  width: 70%;
 }
 .game-stats:first-of-type {
   margin-top: 0;
@@ -216,15 +212,4 @@ body {
   letter-spacing: 1.5px;
 }
 .ctrl-btn--reset {
-}
-
-.start {
-}
-.pause {
-}
-.finish {
-}
-.first {
-}
-.generate {
 }

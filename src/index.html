@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>The Game of Life</title>
     <link rel="stylesheet" href="style.css" />
-    <script src="index.js"></script>
+    <script type="module" src="index.js"></script>
   </head>
   <body>
     <div class="layout">
@@ -20,12 +20,13 @@
           <section class="game-section game-size">
             <h3 class="sr-only">Game area size controller</h3>
             <label for="game-size"
-              ><span class="game-size__title">Cells count:</span>
+              ><span class="game-size__title">Board size</span>
             </label>
               <input
                 class="game-size__input"
                 id="game-size"
                 type="text"
+                name="boardSize"
                 placeholder=""
               />
           </section>
