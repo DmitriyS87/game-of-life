@@ -17,17 +17,32 @@
           <div class="game-section">
             <h1 class="game-title">The Game of Life:</h1>
           </div>
-          <section class="game-section game-size">
-            <h3 class="sr-only">Game area size controller</h3>
+          <section class="game-section game-control">
+            <h3 class="sr-only">Game area size setup input</h3>
             <label for="game-size"
-              ><span class="game-size__title">Board size</span>
+              ><span class="game-control__title">Board size</span>
             </label>
               <input
-                class="game-size__input"
+                class="game-control__input game-control-input"
                 id="game-size"
                 type="text"
                 name="boardSize"
                 placeholder=""
+                autocomplete="off"
+              />
+          </section>
+          <section class="game-section game-control">
+            <h3 class="sr-only">Game update max fps setup input</h3>
+            <label for="game-fps"
+              ><span class="game-control__title">Max FPS</span>
+            </label>
+              <input
+                class="game-control-input game-control__input"
+                id="game-fps"
+                type="text"
+                name="boardSize"
+                placeholder=""
+                autocomplete="off"
               />
           </section>
           <section class="game-section game-generation">

@@ -84,7 +84,7 @@ function createShaderProgram(gl, vertexSource, fragmentSource) {
 }
 
 function createTexture(gl, size, idx = 0, data = null) {
-  gl.activeTexture(gl.TEXTURE0 + idx)
+  gl.activeTexture(gl.TEXTURE0 + idx);
   const texture = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -120,27 +120,27 @@ const bindFrameBuffer = (gl, framebuffer, resultTexture) => {
   return framebuffer;
 };
 
-const createScene = (gl, program, size) => {
-  const vertexPositions = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
-  const positionBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, vertexPositions, gl.STATIC_DRAW);
-
-  const positionLocation = gl.getAttribLocation(program, "a_position");
-  gl.enableVertexAttribArray(positionLocation);
-  gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
-  gl.uniform1f(gl.getUniformLocation(program, "u_pixelSize"), 1.0 / size.x);
-}
-
 export class WebGlCountGame {
+  static isWebGLAvailable() {
+    return false;
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    if (!gl) {
+        console.log("WebGL is not supported in your browser.");
+        return false;
+    }
+    console.log("WebGL is supported.");
+    return true;
+  }
+
   constructor(size) {
     if (WebGlCountGame.instance) {
       return WebGlCountGame.instance;
     }
-
+    console.log('WebGlCountGame');
     WebGlCountGame.instance = this;
     this.size = size;
-    
+
     // ! check binds for unnecessary
     this.countAliveSet.bind(this);
     this.renderToCanvas.bind(this);
@@ -166,24 +166,36 @@ export class WebGlCountGame {
     );
     const { program } = this;
     gl.useProgram(program);
-    createScene(gl, program, size);
+    this.createScene(gl, program, size);
 
     gl.clearColor(0.0, 0.0, 0.0, 0.0);
 
     this.frameBuffer = gl.createFramebuffer();
   }
 
+  createScene = (gl, program, size) => {
+    const vertexPositions = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
+    this.positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, vertexPositions, gl.STATIC_DRAW);
+  
+    const positionLocation = gl.getAttribLocation(program, "a_position");
+    gl.enableVertexAttribArray(positionLocation);
+    gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+    gl.uniform1f(gl.getUniformLocation(program, "u_pixelSize"), 1.0 / size.x);
+  };
+
   countNextState(gl, frameBuffer, size, stateArray) {
     const { x, y } = size;
     gl.viewport(0, 0, x, y);
 
     let currentStateTexture = createTexture(gl, size, 0, stateArray);
-    
+
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, currentStateTexture);
-    gl.uniform1i(gl.getUniformLocation(this.program, 'u_currentState'), 0);
+    gl.uniform1i(gl.getUniformLocation(this.program, "u_currentState"), 0);
 
-    let resultTexture = createTexture(gl, size, 1)
+    let resultTexture = createTexture(gl, size, 1);
 
     frameBuffer = bindFrameBuffer(gl, frameBuffer, resultTexture);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -193,10 +205,9 @@ export class WebGlCountGame {
     // currentStateTexture = resultTexture;
     // resultTexture = temp;
 
-
     const pixelData = new Uint8Array(x * y * 4);
     gl.readPixels(0, 0, x, y, gl.RGBA, gl.UNSIGNED_BYTE, pixelData);
-  
+
     const newSet = new Set();
     for (let i = 0; i < pixelData.length; i += 4) {
       const nX = (i / 4) % x;
@@ -208,7 +219,8 @@ export class WebGlCountGame {
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.renderToCanvas(currentStateTexture);
-  
+    currentStateTexture = null;
+    resultTexture = null;
     return { newSet };
   }
 
@@ -278,5 +290,29 @@ export class WebGlCountGame {
       this.gl.getUniformLocation(this.program, "u_pixelSize"),
       1.0 / newSize.x
     );
+  }
+
+  clean() {
+    this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
+    if (this.program) {
+      this.gl.deleteProgram(this.program)
+      this.program = null;
+    }
+    if (this.positionBuffer) {
+      this.gl.deleteBuffer(this.positionBuffer);
+      this.positionBuffer = null;
+    }
+    if (this.frameBuffer) {
+      this.gl.deleteFramebuffer(this.frameBuffer);
+      this.positionBuffer = null;
+    }
+  }
+
+  destroy() {
+    this.clean();
+    WebGlCountGame.instance = null;
+    this.el = null;
+    this.gl = null;
   }
 }

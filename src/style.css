@@ -77,6 +77,7 @@ body {
 }
 .game-section {
   display: block;
+  overflow: hidden;
   background: #3f3b3c;
   background: linear-gradient(
     156deg,
@@ -119,14 +120,14 @@ body {
   z-index: 2;
 }
 
-.game-size {
+.game-control {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
-.game-size__title {
+.game-control__title {
   font-size: 18px;
   margin: 0;
   color: rgb(238, 174, 202);
@@ -135,14 +136,9 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
-.game-size__input {
-  padding: 6px;
-  font-size: 16px;
-  border-radius: 6px;
+.game-control__input {
   width: 100px;
   height: 32px;
-  background: rgba(68, 72, 87, 0.6);
-  color: rgb(238, 174, 202);
 }
 
 .game-generation__description {
@@ -157,7 +153,16 @@ body {
 
 .game-generation__controls {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.game-control-input {
+  padding: 6px;
+  font-size: 16px;
+  border-radius: 6px;
+  background: rgba(68, 72, 87, 0.6);
+  color: rgb(238, 174, 202);
 }
 
 .game-stats {

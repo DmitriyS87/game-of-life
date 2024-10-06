@@ -1,12 +1,12 @@
 import {
   getRenderTimeCounter,
-  extendOffscreenCanvas,
   cordToKey,
   keyToCoords,
   roundToDecimal,
   fixBorderCoords,
   noOftenThan,
   getRandomColor,
+  convertPerSecToMs,
 } from "./utils.js";
 
 import {
@@ -17,13 +17,21 @@ import {
   GAME_CANVAS_WIDTH_DEFAULT,
   GAME_CANVAS_HEIGHT_DEFAULT,
   DISPLAY_SPEED_DELAY,
-  nextSceneRenderDelay,
+  BASE_UPDATE_FPS,
 } from "./config.js";
 
 import { WebGlCountGame } from "./webGl.js";
 
 let nextTimeout;
 let start = null;
+let nextSceneRenderDelay = convertPerSecToMs(BASE_UPDATE_FPS);
+
+let worker = null;
+try {
+  worker = new Worker("calcScene.js");
+} catch (e) {
+  console.log("Worker api is not supported", e);
+}
 
 const getNeighborsCoords = (x, y, maxX, maxY) => {
   const result = [];
@@ -97,15 +105,13 @@ export class Game {
     this.fields = new Map();
     this.bgRenderMode = 0;
     this.history = [];
-    this.defaultStateMatrix = Array.from({ length: this.sizeY }, () =>
-      Array(this.sizeX).fill(0)
-    );
     this.currentAliveCoords = new Set();
     this.updateSceneData = {};
     this.stateMatrix = [];
     this.updateMatrix = [];
     this.currentGeneration = 0;
     this.generationTime = 0;
+    this.maxFps = BASE_UPDATE_FPS;
     this.rules = {
       0: {
         aliveMinCount: 3,
@@ -163,20 +169,11 @@ export class Game {
     this.ctx.layer.imageSmoothingEnabled = false;
     this.width = this.layerCanvas.width;
     this.height = this.layerCanvas.height;
-    extendOffscreenCanvas(this.bgCanvas, "offscreenCanvasDead");
-    extendOffscreenCanvas(this.bgCanvas, "offscreenCanvasAlive");
-  }
-
-  renderBg() {
-    if (this.bgRenderMode === 0) {
-      this.ctx.bg.drawImage(this.bgCanvas.offscreenCanvasDead, 0, 0);
-      return;
-    }
-    this.ctx.bg.drawImage(this.bgCanvas.offscreenCanvasAlive, 0, 0);
   }
 
   initEventListeners() {
     document.addEventListener("life-game-event-controls", (e) => {
+      console.log(e)
       e.stopPropagation();
       switch (e?.detail?.action) {
         case "start":
@@ -187,6 +184,16 @@ export class Game {
           return;
         case "reset":
           this.reset();
+          return;
+        case "update":
+          const {size, maxFps} = e.detail.data;
+          if (size) {
+            this.updateSize(Number(size));
+          }
+          if (maxFps) {
+            this.maxFps = maxFps;
+            this.setRenderDelay();
+          }
           return;
         case "generate":
           this.generate();
@@ -242,26 +249,47 @@ export class Game {
     }
   };
 
-  initWorker() {
+  initWorker(worker) {
+    this.worker = worker;
     this.worker.onmessage = this.workerUpdateHandler;
+    console.log('WORKER HERE!!!');
   }
 
-  init() {
-    if (WebGlCountGame) {
+  initCountEngine() {
+    if (WebGlCountGame.isWebGLAvailable()) {
       this.webGlCalc = new WebGlCountGame({
         x: this.sizeX,
         y: this.sizeY,
       });
-    } else if (this.worker) {
+    } else if (worker) {
       this.workerCalc = true;
-      this.initWorker();
+      this.initWorker(worker);
     }
+  }
 
+  reloadCountEngine() {
+    if (this.webGlCalc) {
+      this.webGlCalc.destroy();
+      this.webGlCalc = new WebGlCountGame({
+        x: this.sizeX,
+        y: this.sizeY,
+      });
+    }
+  }
+
+  init() {
+    console.log(this)
     this.createCanvas();
+    this.initCountEngine();
     this.createFields();
     this.createCashFigure();
     this.initEventListeners();
+    this.setRenderDelay();
     this.renderLoop();
+    this.sendInitEvent({
+      size: this.sizeX,
+      maxFps: this.maxFps
+    });
   }
 
   updateFpsValue = getRenderTimeCounter(
@@ -277,6 +305,10 @@ export class Game {
     }
   }
 
+  setRenderDelay() {
+    this.nextSceneRenderDelay = convertPerSecToMs(this.maxFps)
+  }
+
   renderLoop() {
     const render = () => {
       this.updateGameScreen();
@@ -288,7 +320,7 @@ export class Game {
             this.printFPS(timeRendered);
             render();
           }),
-        nextSceneRenderDelay
+          this.nextSceneRenderDelay
       );
     };
 
@@ -304,7 +336,7 @@ export class Game {
         1
       )
     );
-    const { ctx, sizeX, sizeY, width, height, randomColor } = this;
+    const { sizeX, sizeY, width, height, randomColor } = this;
     this._fieldWidth = Math.max(
       roundToDecimal(width / sizeX, decimalsCount),
       1
@@ -347,7 +379,10 @@ export class Game {
   createRandomFirstGeneration() {
     this.currentGeneration = 1;
     this.currentAliveCoords = new Set();
-    this.stateMatrix = [...this.defaultStateMatrix].map((row, x) => {
+    const boardMatrix = Array.from({ length: this.sizeY }, () =>
+      Array(this.sizeX).fill(0)
+    );
+    this.stateMatrix = [...boardMatrix].map((row, x) => {
       return row.map((el, y) => {
         const val = Math.random() < 0.6 ? 0 : 1;
         if (val === 1) this.currentAliveCoords.add(cordToKey(x, y));
@@ -424,7 +459,6 @@ export class Game {
     this.clearLayer();
     this.updateSceneData = {};
     this.currentAliveCoords = new Set();
-    this.currentGeneration = 0;
     this.resetGameInfo();
   }
 
@@ -588,6 +622,26 @@ export class Game {
     }
   }
   togglePoint() {}
+
+  updateSize(size) {
+    this.reset();
+    this.fields = new Map();
+    this.sizeX = size;
+    this.sizeY = size;
+    this.createFields();
+    this.reloadCountEngine();
+    console.log('GOT IT ', size)
+  }
+
+  sendInitEvent(data) {
+    const newGenerationEvent = new CustomEvent("life-game-runtime-event", {
+      detail: {
+        type: "init",
+        data,
+      },
+    });
+    document.dispatchEvent(newGenerationEvent);
+  }
 
   updateGameInfo(data) {
     const newGenerationEvent = new CustomEvent("life-game-runtime-event", {

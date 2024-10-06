@@ -79,3 +79,4 @@ export const getRandomColor = () =>
   `rgb(${Math.round(Math.random() * 255)}, ${Math.round(
     Math.random() * 255
   )}, ${Math.round(Math.random() * 255)})`;
+export const convertPerSecToMs = (v) => Math.round(1000 / v);
