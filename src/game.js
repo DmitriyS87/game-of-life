@@ -22,7 +22,7 @@ import {
 
 import { WebGlCountGame } from "./webGl.js";
 
-let nextTimeout;
+let renderInterval;
 let start = null;
 let nextSceneRenderDelay = convertPerSecToMs(BASE_UPDATE_FPS);
 
@@ -191,7 +191,7 @@ export class Game {
           }
           if (maxFps) {
             this.maxFps = maxFps;
-            this.setRenderDelay();
+            this.startRender();
           }
           return;
         case "generate":
@@ -281,8 +281,7 @@ export class Game {
     this.createFields();
     this.createCashFigure();
     this.initEventListeners();
-    this.setRenderDelay();
-    this.renderLoop();
+    this.startRender();
     this.sendInitEvent({
       size: this.sizeX,
       maxFps: this.maxFps
@@ -302,20 +301,20 @@ export class Game {
     }
   }
 
-  setRenderDelay() {
+  startRender() {
     this.nextSceneRenderDelay = convertPerSecToMs(this.maxFps)
+    renderInterval && clearInterval(renderInterval);
+    this.renderLoop();
   }
 
   renderLoop() {
     const render = () => {
       this.updateGameScreen();
-
-      nextTimeout = setTimeout(
+      renderInterval = setInterval(
         () =>
           requestAnimationFrame((timeRendered) => {
-            clearTimeout(nextTimeout);
             this.printFPS(timeRendered);
-            render();
+            this.updateGameScreen();
           }),
           this.nextSceneRenderDelay
       );
@@ -326,13 +325,7 @@ export class Game {
 
   createFields() {
     const Field = this.Field;
-    const decimalsCount = Math.round(
-      Math.max(
-        GAME_DEFAULT_AREA_SIZE_X / this.width,
-        GAME_DEFAULT_AREA_SIZE_Y / this.height,
-        1
-      )
-    );
+    const decimalsCount = 2;
     const { sizeX, sizeY, width, height, randomColor } = this;
     this._fieldWidth = Math.max(
       roundToDecimal(width / sizeX, decimalsCount),

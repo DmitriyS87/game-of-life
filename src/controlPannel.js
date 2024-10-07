@@ -43,7 +43,7 @@ const initScreenSizeEventListeners = (gameSizeInput) => {
     gameSizeInput.addEventListener("blur", (e) => {
       const target = e.target;
       const size = Number(screenSize);
-      if (Number.isInteger(size) && size > 2) {
+      if (Number.isInteger(size) && size >= 2) {
         document.dispatchEvent(updateGameBoardSize(size));
         screenSize = "";
         target.setAttribute("placeholder", size);
@@ -52,6 +52,7 @@ const initScreenSizeEventListeners = (gameSizeInput) => {
       target.value = "";
       screenSize = GAME_DEFAULT_AREA_SIZE_X;
       target.setAttribute("placeholder", GAME_DEFAULT_AREA_SIZE_X);
+      document.dispatchEvent(updateGameBoardSize(GAME_DEFAULT_AREA_SIZE_X));
       console.error("You have to set integer number bigger than 2");
     });
   } catch (e) {
@@ -66,7 +67,7 @@ const initFPSEventListeners = (gameFpsInput) => {
 
     gameFpsInput.addEventListener("input", (event) => {
       maxFps = event.target.value;
-      if (!/^\d+$/.test(maxFps)) {
+      if (!/^[\d,\.]+$/.test(maxFps)) {
         maxFps = maxFps.slice(0, -1);
         gameFpsInput.value = maxFps;
       }
@@ -75,7 +76,7 @@ const initFPSEventListeners = (gameFpsInput) => {
     gameFpsInput.addEventListener("blur", (e) => {
       const target = e.target;
       const newValue = Number(maxFps);
-      if (Number.isInteger(newValue) && newValue > 1) {
+      if (!Number.isNaN(newValue) && newValue >= 0.1) {
         document.dispatchEvent(updateGameMaxFps(newValue));
         target.setAttribute("placeholder", newValue);
         return;
@@ -83,7 +84,8 @@ const initFPSEventListeners = (gameFpsInput) => {
       target.value = "";
       maxFps = BASE_UPDATE_FPS;
       target.setAttribute("placeholder", BASE_UPDATE_FPS);
-      console.error("You have to set integer number bigger than 1");
+      document.dispatchEvent(updateGameMaxFps(BASE_UPDATE_FPS));
+      console.error("You have to set number bigger than 0.1");
     });
   } catch (e) {
     throw new Error(`Cant init game maxFps controller: ${e}`);

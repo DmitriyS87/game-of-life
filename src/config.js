@@ -5,6 +5,6 @@ export const GAME_DEFAULT_AREA_SIZE_X = 200;
 export const GAME_DEFAULT_AREA_SIZE_Y = 200;
 export const GAME_CANVAS_WIDTH_DEFAULT = 320;
 export const GAME_CANVAS_HEIGHT_DEFAULT = 320;
-export const BASE_UPDATE_FPS = 30;
+export const BASE_UPDATE_FPS = 16;
 export const DISPLAY_SPEED_DELAY = 300;
 export const HIDDEN_CLASS = "visually-hidden";
