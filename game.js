@@ -20,20 +20,16 @@ import {
   GAME_CANVAS_HEIGHT_DEFAULT,
   DISPLAY_SPEED_DELAY,
   BASE_UPDATE_FPS,
+  GAME_EVENT_NAME,
+  GAME_MAIN_CONTAINER_SELECTOR,
+  CONTROL_PANEL_EVENT_NAME,
 } from "./config.js";
 
 import { WebGlCountGame } from "./webGl.js";
+import { Dot } from "./figures.js";
 
 let renderInterval;
-let start = null;
-let nextSceneRenderDelay = convertPerSecToMs(BASE_UPDATE_FPS);
-
 let worker = null;
-try {
-  worker = new Worker("calcScene.js");
-} catch (e) {
-  console.warn("Worker api is not supported", e);
-}
 
 const getNeighborsCoords = (x, y, maxX, maxY) => {
   const result = [];
@@ -60,8 +56,6 @@ class Field {
     this.dx = dx;
     this.dy = dy;
     this.color = color;
-    //! looks like not needed
-    this.isAlive = false;
   }
 
   get renderData() {
@@ -93,10 +87,9 @@ export class Game {
     container,
     Figure = Dot,
     randomColor = false,
-    worker,
   }) {
     this.state = "init";
-    this.worker = worker;
+
     this.container = container;
     this.sizeX = sizeX ?? GAME_DEFAULT_AREA_SIZE_X;
     this.sizeY = sizeY ?? GAME_DEFAULT_AREA_SIZE_Y;
@@ -104,7 +97,6 @@ export class Game {
     this.Figure = Figure;
     this.randomColor = randomColor;
 
-    // this.fields = new Map();
     this.fields = {};
     this.bgRenderMode = 0;
     this.history = [];
@@ -140,14 +132,41 @@ export class Game {
     };
   }
 
-  createCanvasElement({ cn }) {
-    const $layer = document.createElement("canvas");
-    $layer.classList.add(cn);
-    $layer.innerHTML = `Your browser doesn't appear to support the HTML5
-      <code>&lt;canvas&gt;</code> element.
-      `;
-    this._$container.appendChild($layer);
-    return $layer;
+  init() {
+    this.createInitialStateMatrix();
+    this.createCanvas();
+    this.initCountEngine();
+    this.createFields();
+    this.createCacheFigure();
+    this.initEventListeners();
+    this.startRender();
+    this.sendInitEvent({
+      size: this.sizeX,
+      maxFps: this.maxFps,
+    });
+  }
+
+  initWorker(worker) {
+    this.worker = worker;
+    this.worker.onmessage = this.workerUpdateHandler;
+  }
+
+  initCountEngine() {
+    if (WebGlCountGame.isWebGLAvailable()) {
+      this.webGlCalc = new WebGlCountGame({
+        x: this.sizeX,
+        y: this.sizeY,
+      });
+      return;
+    } 
+
+    try {
+      worker = new Worker("calcScene.js");
+      this.workerCalc = true;
+      this.initWorker(worker);
+    } catch (e) {
+      console.warn("Worker api is not supported", e);
+    }
   }
 
   createCanvas() {
@@ -173,71 +192,12 @@ export class Game {
     this.width = this.layerCanvas.width;
     this.height = this.layerCanvas.height;
   }
+
   createInitialStateMatrix() {
     this.stateMatrix = new Uint8Array(this.sizeX * this.sizeY);
   }
-  initEventListeners() {
-    document.addEventListener("life-game-event-controls", (e) => {
-      e.stopPropagation();
-      switch (e?.detail?.action) {
-        case "start":
-          this.start();
-          return;
-        case "stop":
-          this.pause();
-          return;
-        case "reset":
-          this.reset();
-          return;
-        case "update":
-          const { size, maxFps } = e.detail.data;
-          if (size) {
-            this.updateSize(Number(size));
-          }
-          if (maxFps) {
-            this.maxFps = maxFps;
-            this.startRender();
-          }
-          return;
-        case "generate":
-          this.generate();
-          return;
 
-        default:
-          console.error("unhandled game event!");
-          return;
-      }
-    });
-    document.addEventListener("click", (e) => {
-      if (this._$container.contains(e.target)) {
-        e.stopPropagation();
-        e.preventDefault();
-        const x = e.offsetX;
-        const y = e.offsetY;
-        this.handleGameAreaClick({ x, y });
-      }
-    });
-  }
-
-  handleGameAreaClick({ x, y }) {
-    const targetX = Math.floor(x / this._fieldWidth);
-    const targetY = Math.floor(y / this._fieldHeight);
-    const targetCoords = cordToKey(targetX, targetY);
-    const index = getUnitArrayIndex(targetX, targetY, this.sizeX);
-    const isAlive = this.stateMatrix[index] === 1;
-    if (isAlive) {
-      this.stateMatrix[index] = 0;
-      this.aliveCount--;
-      this.clearCoord(targetCoords);
-    } else {
-      this.stateMatrix[index] = 1;
-      this.aliveCount++;
-      this.renderCoord(targetCoords);
-    }
-    this.updateGameInfo(this.getGenerationInfo);
-  }
-
-  createCashFigure() {
+  createCacheFigure() {
     if (this.aliveCacheFigure) {
       this.aliveCacheFigure.remove();
       this.aliveCacheFigure = null;
@@ -280,39 +240,6 @@ export class Game {
     this.cachedFigure = this.aliveCacheFigure;
   }
 
-  workerUpdateHandler = (event) => {
-    if (this.state === "calculation") {
-      this.updateSceneData = event.data;
-      this.currentGeneration++;
-      this.aliveCount = this.updateSceneData.aliveSet.size;
-      this.setState("play");
-      this.generationTime = Date.now() - this.workerStartCount;
-      this.workerStartCount = 0;
-      this.renderTime = this.countRunTime(this.renderLayer.bind(this));
-      this.updateGameInfo(this.getGenerationInfo);
-      if (this.aliveCount === 0) {
-        this.finish();
-      }
-    }
-  };
-
-  initWorker(worker) {
-    this.worker = worker;
-    this.worker.onmessage = this.workerUpdateHandler;
-  }
-
-  initCountEngine() {
-    if (WebGlCountGame.isWebGLAvailable()) {
-      this.webGlCalc = new WebGlCountGame({
-        x: this.sizeX,
-        y: this.sizeY,
-      });
-    } else if (worker) {
-      this.workerCalc = true;
-      this.initWorker(worker);
-    }
-  }
-
   reloadCountEngine() {
     if (this.webGlCalc) {
       this.webGlCalc.destroy();
@@ -321,55 +248,6 @@ export class Game {
         y: this.sizeY,
       });
     }
-  }
-
-  init() {
-    this.createInitialStateMatrix();
-    this.createCanvas();
-    this.initCountEngine();
-    this.createFields();
-    this.createCashFigure();
-    this.initEventListeners();
-    this.startRender();
-    this.sendInitEvent({
-      size: this.sizeX,
-      maxFps: this.maxFps,
-    });
-  }
-
-  updateFpsValue = getRenderTimeCounter(
-    noOftenThan(
-      (value) => this.updateGameInfo({ fps: 1000 / value }),
-      DISPLAY_SPEED_DELAY
-    )
-  );
-
-  printFPS(timeRendered) {
-    if (this.state === "play") {
-      this.updateFpsValue(timeRendered);
-    }
-  }
-
-  startRender() {
-    this.nextSceneRenderDelay = convertPerSecToMs(this.maxFps);
-    renderInterval && clearInterval(renderInterval);
-    this.renderLoop();
-  }
-
-  renderLoop() {
-    const render = () => {
-      this.updateGameScreen();
-      renderInterval = setInterval(
-        () =>
-          requestAnimationFrame((timeRendered) => {
-            this.printFPS(timeRendered);
-            this.updateGameScreen();
-          }),
-        this.nextSceneRenderDelay
-      );
-    };
-
-    render();
   }
 
   createFields() {
@@ -399,19 +277,6 @@ export class Game {
     }
   }
 
-  clear() {
-    const { ctx, width, height } = this;
-    ctx.bg.clearRect(0, 0, width, height);
-    ctx.layer.clearRect(0, 0, width, height);
-  }
-
-  resetRuntimeCounters() {
-    this.currentGeneration = 0;
-    this.generationTime = 0;
-    this.aliveCount = 0;
-    this.renderTime = 0;
-  }
-
   createRandomFirstGeneration() {
     this.aliveCount = 0;
     this.currentGeneration = 1;
@@ -425,7 +290,7 @@ export class Game {
         }
       }
     }
-    this.updateGameInfo(this.getGenerationInfo);
+    this.updateDisplayGameInfo(this.getGenerationInfo);
     this.setState("renderGenerated");
   }
 
@@ -488,38 +353,15 @@ export class Game {
     };
   }
 
-  clearLayer() {
-    const ctx = this.ctx.layer;
-    ctx.clearRect(0, 0, this.width, this.height);
+  clear() {
+    const { ctx, width, height } = this;
+    ctx.bg.clearRect(0, 0, width, height);
+    ctx.layer.clearRect(0, 0, width, height);
   }
 
-  reset() {
-    this.clearLayer();
-    this.createInitialStateMatrix();
-    this.updateSceneData = {};
-    this.currentAliveCoords = new Set();
-    this.resetGameInfo();
-  }
-
-  resetGameInfo() {
-    this.currentGeneration = 0;
-    this.generationTime = 0;
-    this.aliveCount = 0;
-    this.renderTime = 0;
-    this.updateGameInfo(this.getGenerationInfo);
-  }
-
-  renderCoord(coords) {
-    const field = this.fields[coords];
-    const { x, y } = field.renderData;
-    const img = this.cachedFigure;
-    this.ctx.layer.drawImage(img, x, y);
-  }
-
-  clearCoord(coords) {
-    const field = this.fields[coords];
-    const { x, y, dx, dy } = field.renderData;
-    this.ctx.layer.clearRect(x, y, dx, dy);
+  draw() {
+    this.clear();
+    this.countRunTime(this.renderLayer.bind(this));
   }
 
   renderLayer() {
@@ -557,15 +399,21 @@ export class Game {
     ctx.closePath();
   }
 
-  draw() {
-    this.clear();
-    this.countRunTime(this.renderLayer.bind(this));
+  clearLayer() {
+    const ctx = this.ctx.layer;
+    ctx.clearRect(0, 0, this.width, this.height);
   }
 
-  countRunTime(fn) {
-    const startTime = Date.now();
-    fn();
-    return Date.now() - startTime;
+  printFPS(timeRendered) {
+    if (this.state === "play") {
+      this.updateFpsValue(timeRendered);
+    }
+  }
+
+  updateGameScreen(params) {
+    if (this.state === "play") {
+      this.updateScene();
+    }
   }
 
   updateScene() {
@@ -580,7 +428,7 @@ export class Game {
         });
         this.currentGeneration++;
         this.renderTime = this.countRunTime(this.renderLayer.bind(this));
-        this.updateGameInfo(this.getGenerationInfo);
+        this.updateDisplayGameInfo(this.getGenerationInfo);
         if (this.aliveCount === 0 && this.state === "play") {
           this.finish();
         }
@@ -592,11 +440,11 @@ export class Game {
         };
         this.worker.postMessage(messageBody);
         this.workerStartCount = Date.now();
-        this.setState("calculation");
+        this.setState("workerCalc");
       } else {
         this.generationTime = this.countRunTime(this.generateNext.bind(this));
         this.renderTime = this.countRunTime(this.renderLayer.bind(this));
-        this.updateGameInfo(this.getGenerationInfo);
+        this.updateDisplayGameInfo(this.getGenerationInfo);
         if (this.currentAliveCoords.size === 0 && this.state === "play") {
           this.finish();
         }
@@ -604,15 +452,21 @@ export class Game {
     }
   }
 
-  updateGameScreen(params) {
-    if (this.state === "play") {
-      this.updateScene();
+  workerUpdateHandler = (event) => {
+    if (this.state === "workerCalc") {
+      this.updateSceneData = event.data;
+      this.currentGeneration++;
+      this.aliveCount = this.updateSceneData.aliveSet.size;
+      this.setState("play");
+      this.generationTime = Date.now() - this.workerStartCount;
+      this.workerStartCount = 0;
+      this.renderTime = this.countRunTime(this.renderLayer.bind(this));
+      this.updateDisplayGameInfo(this.getGenerationInfo);
+      if (this.aliveCount === 0) {
+        this.finish();
+      }
     }
-  }
-
-  setState(value) {
-    this.state = value;
-  }
+  };
 
   start() {
     this.setState("play");
@@ -620,29 +474,18 @@ export class Game {
   pause() {
     this.setState("pause");
   }
+  reset() {
+    this.clearLayer();
+    this.createInitialStateMatrix();
+    this.updateSceneData = {};
+    this.currentAliveCoords = new Set();
+    this.resetRuntimeCounters()
+    this.updateDisplayGameInfo(this.getGenerationInfo);
+  }
   finish() {
     this.setState("finish");
     this.onFinish();
   }
-  countAliveCount() {
-    this.aliveCount = this.stateMatrix.reduce((a, v) => a + v, 0);
-  }
-  createRandomGeneration() {
-    this.generationTime = this.countRunTime(
-      this.createRandomFirstGeneration.bind(this)
-    );
-    this.countAliveCount();
-  }
-  generate() {
-    if (this.state !== "play") {
-      this.resetRuntimeCounters();
-      this.updateGameInfo(this.getGenerationInfo);
-      this.createRandomGeneration();
-      this.renderTime = this.countRunTime(this.draw.bind(this));
-      this.updateGameInfo(this.getGenerationInfo);
-    }
-  }
-  togglePoint() {}
 
   updateSize(size) {
     this.reset();
@@ -650,36 +493,202 @@ export class Game {
     this.sizeX = size;
     this.sizeY = size;
     this.createFields();
-    this.createCashFigure();
+    this.createCacheFigure();
     this.reloadCountEngine();
   }
 
-  sendInitEvent(data) {
-    const newGenerationEvent = new CustomEvent("life-game-runtime-event", {
-      detail: {
-        type: "init",
-        data,
-      },
-    });
-    document.dispatchEvent(newGenerationEvent);
+  startRender() {
+    this.nextSceneRenderDelay = convertPerSecToMs(this.maxFps);
+    renderInterval && clearInterval(renderInterval);
+    this.renderLoop();
   }
 
-  updateGameInfo(data) {
-    const newGenerationEvent = new CustomEvent("life-game-runtime-event", {
-      detail: {
+  generate() {
+    if (this.state !== "play") {
+      this.resetRuntimeCounters();
+      this.updateDisplayGameInfo(this.getGenerationInfo);
+      this.createRandomGeneration();
+      this.renderTime = this.countRunTime(this.draw.bind(this));
+      this.updateDisplayGameInfo(this.getGenerationInfo);
+    }
+  }
+
+  initEventListeners() {
+    document.addEventListener(CONTROL_PANEL_EVENT_NAME, (e) => {
+      e.stopPropagation();
+      switch (e?.detail?.action) {
+        case "start":
+          this.start();
+          return;
+        case "stop":
+          this.pause();
+          return;
+        case "reset":
+          this.reset();
+          return;
+        case "update":
+          const { size, maxFps } = e.detail.data;
+          if (size) {
+            this.updateSize(Number(size));
+          }
+          if (maxFps) {
+            this.maxFps = maxFps;
+            this.startRender();
+          }
+          return;
+        case "generate":
+          this.generate();
+          return;
+
+        default:
+          console.error("Unhandled game event!");
+          return;
+      }
+    });
+    document.addEventListener("click", (e) => {
+      if (this._$container.contains(e.target)) {
+        e.stopPropagation();
+        e.preventDefault();
+        const x = e.offsetX;
+        const y = e.offsetY;
+        this.handleGameAreaClick({ x, y });
+      }
+    });
+  }
+
+  handleGameAreaClick({ x, y }) {
+    const targetX = Math.floor(x / this._fieldWidth);
+    const targetY = Math.floor(y / this._fieldHeight);
+    const targetCoords = cordToKey(targetX, targetY);
+    const index = getUnitArrayIndex(targetX, targetY, this.sizeX);
+    const isAlive = this.stateMatrix[index] === 1;
+    if (isAlive) {
+      this.stateMatrix[index] = 0;
+      this.aliveCount--;
+      this.clearCoord(targetCoords);
+    } else {
+      this.stateMatrix[index] = 1;
+      this.aliveCount++;
+      this.renderCoord(targetCoords);
+    }
+    this.updateDisplayGameInfo(this.getGenerationInfo);
+  }
+
+  sendInitEvent(data) {
+    document.dispatchEvent(
+      this.createGameEventMsg({
+        type: "init",
+        data,
+      })
+    );
+  }
+
+  updateDisplayGameInfo(data) {
+    document.dispatchEvent(
+      this.createGameEventMsg({
         type: "new-generation",
         data,
-      },
-    });
-    document.dispatchEvent(newGenerationEvent);
+      })
+    );
   }
 
   onFinish() {
-    const newGenerationEvent = new CustomEvent("life-game-runtime-event", {
+    document.dispatchEvent(this.createGameEventMsg({ type: "finish" }));
+  }
+
+  createGameEventMsg({ type, data }) {
+    return new CustomEvent(GAME_EVENT_NAME, {
       detail: {
-        type: "finish",
+        type,
+        data,
       },
     });
-    document.dispatchEvent(newGenerationEvent);
+  }
+
+  countAliveCount() {
+    this.aliveCount = this.stateMatrix.reduce((a, v) => a + v, 0);
+  }
+
+  countRunTime(fn) {
+    const startTime = Date.now();
+    fn();
+    return Date.now() - startTime;
+  }
+
+  createCanvasElement({ cn }) {
+    const $layer = document.createElement("canvas");
+    $layer.classList.add(cn);
+    $layer.innerHTML = `Your browser doesn't appear to support the HTML5
+      <code>&lt;canvas&gt;</code> element.
+      `;
+    this._$container.appendChild($layer);
+    return $layer;
+  }
+
+  createRandomGeneration() {
+    this.generationTime = this.countRunTime(
+      this.createRandomFirstGeneration.bind(this)
+    );
+    this.countAliveCount();
+  }
+
+  renderCoord(coords) {
+    const field = this.fields[coords];
+    const { x, y } = field.renderData;
+    const img = this.cachedFigure;
+    this.ctx.layer.drawImage(img, x, y);
+  }
+
+  clearCoord(coords) {
+    const field = this.fields[coords];
+    const { x, y, dx, dy } = field.renderData;
+    this.ctx.layer.clearRect(x, y, dx, dy);
+  }
+
+  resetRuntimeCounters() {
+    this.currentGeneration = 0;
+    this.generationTime = 0;
+    this.aliveCount = 0;
+    this.renderTime = 0;
+  }
+
+  setState(value) {
+    this.state = value;
+  }
+
+  updateFpsValue = getRenderTimeCounter(
+    noOftenThan(
+      (value) => this.updateDisplayGameInfo({ fps: 1000 / value }),
+      DISPLAY_SPEED_DELAY
+    )
+  );
+
+  renderLoop() {
+    const render = () => {
+      this.updateGameScreen();
+      renderInterval = setInterval(
+        () =>
+          requestAnimationFrame((timeRendered) => {
+            this.printFPS(timeRendered);
+            this.updateGameScreen();
+          }),
+        this.nextSceneRenderDelay
+      );
+    };
+
+    render();
   }
 }
+
+export const initGame = () => {
+  try {
+    const game = new Game({
+      container: GAME_MAIN_CONTAINER_SELECTOR,
+      Figure: Dot,
+      randomColor: false,
+    });
+    game.init();
+  } catch (e) {
+    console.error(`Game error: ${e}`);
+  }
+};
