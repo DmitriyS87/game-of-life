@@ -1,14 +1,14 @@
 import {
   getRenderTimeCounter,
   cordToKey,
-  keyToCoords,
   roundToDecimal,
-  fixBorderCoords,
   noOftenThan,
   getRandomColor,
   convertPerSecToMs,
   getUnitArrayIndex,
   getCordsByUnitIndex,
+  getNeighborsCords,
+  mod,
 } from "./utils.js";
 
 import {
@@ -30,24 +30,6 @@ import { Dot } from "./figures.js";
 
 let renderInterval;
 let worker = null;
-
-const getNeighborsCoords = (x, y, maxX, maxY) => {
-  const result = [];
-  [-1, 0, 1].forEach((i) => {
-    [-1, 0, 1].forEach((j) => {
-      if (!(i === 0 && j === 0)) {
-        result.push(
-          `${fixBorderCoords(Number(x) + i, 0, maxX)}:${fixBorderCoords(
-            Number(y) + j,
-            0,
-            maxY
-          )}`
-        );
-      }
-    });
-  });
-  return result;
-};
 
 class Field {
   constructor(x, y, dx, dy, color) {
@@ -81,13 +63,7 @@ export class Game {
   aliveColor = GAME_ALIVE_COLOR;
   deadColor = GAME_DEAD_COLOR;
 
-  constructor({
-    sizeX,
-    sizeY,
-    container,
-    Figure = Dot,
-    randomColor = false,
-  }) {
+  constructor({ sizeX, sizeY, container, Figure = Dot, randomColor = false }) {
     this.state = "init";
 
     this.container = container;
@@ -158,7 +134,7 @@ export class Game {
         y: this.sizeY,
       });
       return;
-    } 
+    }
 
     try {
       worker = new Worker("calcScene.js");
@@ -295,62 +271,15 @@ export class Game {
   }
 
   generateNext() {
-    const countNeighbors = (coordsSet) => {
-      const result = new Map();
-      coordsSet.forEach((coords) => {
-        const [x, y] = keyToCoords(coords);
-        const neighbors = getNeighborsCoords(x, y, this.sizeX, this.sizeY);
+    const newStateMatrix = this.countNextState(this.stateMatrix, { width: this.sizeX, height: this.sizeY });
+    const { changedFields } = this.countNextRenderChanges(
+      this.stateMatrix,
+      newStateMatrix,
+      this.sizeX
+    );
 
-        neighbors.forEach((coords) => {
-          if (!result.has(coords)) {
-            result.set(coords, 0);
-          }
-          result.set(coords, result.get(coords) + 1);
-        });
-      });
-      return result;
-    };
-
-    this.coordsToHide = null;
-    this.coordsToRender = null;
-
-    const newAliveCoords = new Set();
-    const survivedCoords = new Set();
-    let deadCoords = new Set();
-
-    const countedNeighbors = countNeighbors(this.currentAliveCoords);
-
-    countedNeighbors.forEach((count, coords) => {
-      const isAlive = this.currentAliveCoords.has(coords);
-      if (isAlive) {
-        this.currentAliveCoords.delete(coords);
-        const { maxAlive, minAlive } = this.rules[1];
-        if (count >= minAlive && count <= maxAlive) {
-          survivedCoords.add(coords);
-        } else {
-          deadCoords.add(coords);
-        }
-      } else {
-        const { aliveMinCount } = this.rules[0];
-        if (count === aliveMinCount) {
-          newAliveCoords.add(coords);
-        }
-      }
-    });
-
-    if (this.currentAliveCoords.size) {
-      deadCoords = new Set([...deadCoords, ...this.currentAliveCoords]);
-    }
-
-    const currentAliveCoords = new Set([...survivedCoords, ...newAliveCoords]);
-    this.currentGeneration++;
-    this.aliveCount = currentAliveCoords.size;
-
-    this.updateSceneData = {
-      coordsToHide: deadCoords,
-      coordsToRender: newAliveCoords,
-      aliveSet: currentAliveCoords,
-    };
+    this.stateMatrix = newStateMatrix;
+    this.changedFields = changedFields;
   }
 
   clear() {
@@ -367,35 +296,22 @@ export class Game {
   renderLayer() {
     const ctx = this.ctx.layer;
     ctx.beginPath();
-    if (
-      this.updateSceneData.coordsToHide ||
-      this.updateSceneData.coordsToRender
-    ) {
-      const { aliveSet, coordsToHide, coordsToRender } = this.updateSceneData;
-      coordsToRender.forEach((coords) => {
-        this.renderCoord(coords);
+    if (this.changedFields) {
+      this.changedFields.forEach(({ x, y, state }) => {
+        state === 1
+          ? this.renderCoord(cordToKey(x, y))
+          : this.clearCoord(cordToKey(x, y));
       });
-      coordsToHide.forEach((coords) => {
-        this.clearCoord(coords);
-      });
-      this.currentAliveCoords = new Set([...aliveSet]);
+      this.changedFields = null;
     } else {
-      if (this.changedFields) {
-        this.changedFields.forEach(({ x, y, state }) => {
-          state === 1
-            ? this.renderCoord(cordToKey(x, y))
-            : this.clearCoord(cordToKey(x, y));
-        });
-        this.changedFields = null;
-      } else {
-        this.stateMatrix.forEach((val, idx) => {
-          if (val === 1) {
-            const [x, y] = getCordsByUnitIndex(idx, this.sizeX);
-            this.renderCoord(cordToKey(x, y));
-          }
-        });
-      }
+      this.stateMatrix.forEach((val, idx) => {
+        if (val === 1) {
+          const [x, y] = getCordsByUnitIndex(idx, this.sizeX);
+          this.renderCoord(cordToKey(x, y));
+        }
+      });
     }
+
     ctx.closePath();
   }
 
@@ -418,6 +334,18 @@ export class Game {
 
   updateScene() {
     if (this.state === "play") {
+      if (this.workerCalc) {
+        const messageBody = {
+          stateMatrix: this.stateMatrix,
+          oldAliveSet: this.currentAliveCoords,
+          gameBoardSize: { width: this.sizeX, height: this.sizeY },
+          rules: this.rules,
+        };
+        this.worker.postMessage(messageBody);
+        this.workerStartCount = Date.now();
+        this.setState("workerCalc");
+        return;
+      }
       if (this.webGlCalc) {
         this.generationTime = this.countRunTime(() => {
           const { newStateMatrix, changedFields } =
@@ -429,23 +357,15 @@ export class Game {
         this.currentGeneration++;
         this.renderTime = this.countRunTime(this.renderLayer.bind(this));
         this.updateDisplayGameInfo(this.getGenerationInfo);
-        if (this.aliveCount === 0 && this.state === "play") {
+        if (this.aliveCount === 0) {
           this.finish();
         }
-      } else if (this.workerCalc) {
-        const messageBody = {
-          oldAliveSet: this.currentAliveCoords,
-          gameBoardSize: { width: this.sizeX, height: this.sizeY },
-          rules: this.rules,
-        };
-        this.worker.postMessage(messageBody);
-        this.workerStartCount = Date.now();
-        this.setState("workerCalc");
       } else {
         this.generationTime = this.countRunTime(this.generateNext.bind(this));
         this.renderTime = this.countRunTime(this.renderLayer.bind(this));
+        this.currentGeneration++;
         this.updateDisplayGameInfo(this.getGenerationInfo);
-        if (this.currentAliveCoords.size === 0 && this.state === "play") {
+        if (this.aliveCount === 0) {
           this.finish();
         }
       }
@@ -454,15 +374,20 @@ export class Game {
 
   workerUpdateHandler = (event) => {
     if (this.state === "workerCalc") {
-      this.updateSceneData = event.data;
-      this.currentGeneration++;
-      this.aliveCount = this.updateSceneData.aliveSet.size;
+      const { newStateMatrix, changedFields, stayAliveFields } = event.data;
+      this.stateMatrix = newStateMatrix;
+      this.changedFields = changedFields;
+      this.countAliveCount();
+
+      // this.aliveCount = this.updateSceneData.aliveSet.size;
       this.setState("play");
       this.generationTime = Date.now() - this.workerStartCount;
       this.workerStartCount = 0;
+
+      this.currentGeneration++;
       this.renderTime = this.countRunTime(this.renderLayer.bind(this));
       this.updateDisplayGameInfo(this.getGenerationInfo);
-      if (this.aliveCount === 0) {
+      if (this.aliveCount === 0 && this.state === "play") {
         this.finish();
       }
     }
@@ -479,7 +404,7 @@ export class Game {
     this.createInitialStateMatrix();
     this.updateSceneData = {};
     this.currentAliveCoords = new Set();
-    this.resetRuntimeCounters()
+    this.resetRuntimeCounters();
     this.updateDisplayGameInfo(this.getGenerationInfo);
   }
   finish() {
@@ -631,6 +556,59 @@ export class Game {
     );
     this.countAliveCount();
   }
+
+  countNextState = (stateMatrix, { width, height }) => {
+    const newStateMatrix = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let aliveNeighbors = 0;
+        const neighbors = getNeighborsCords(x, y, width);
+        neighbors.forEach(([x, y]) => {
+          const torX = mod(x, width);
+          const torY = mod(y, height);
+          const isAlive =
+            stateMatrix[getUnitArrayIndex(torX, torY, width)] === 1;
+          if (isAlive) {
+            aliveNeighbors++;
+          }
+        });
+
+        const current = stateMatrix[getUnitArrayIndex(x, y, width)];
+        let newState = 0;
+        if (current === 1) {
+          if (aliveNeighbors === 2 || aliveNeighbors === 3) {
+            newState = 1;
+          }
+        } else if (aliveNeighbors == 3) {
+          newState = 1;
+        }
+        newStateMatrix[getUnitArrayIndex(x, y, width)] = newState;
+      }
+    }
+
+    return newStateMatrix;
+  };
+
+  countNextRenderChanges = (oldState, newState, size) => {
+    const changedFields = [];
+    for (let idx = 0; idx < newState.length; idx++) {
+      const [x, y] = getCordsByUnitIndex(idx, size);
+      if (newState[idx] === 1) {
+        if (oldState[idx] !== 1) {
+          changedFields.push({ x, y, state: 1 });
+        } else {
+          changedFields.push({ x, y, state: 1 });
+        }
+      } else {
+        if (oldState[idx] === 1) {
+          changedFields.push({ x, y, state: 0 });
+        }
+      }
+    }
+    return {
+      changedFields,
+    };
+  };
 
   renderCoord(coords) {
     const field = this.fields[coords];

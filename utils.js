@@ -94,8 +94,8 @@ export const getNeighborsCords = (x, y) => {
     [0, 1],
     [1, 1],
   ];
-  targets.forEach((dx, dy) => {
-    result.push([x + dx], [y + dy]);
+  targets.forEach(([dx, dy]) => {
+    result.push([x + dx, y + dy]);
   });
   return result;
 };

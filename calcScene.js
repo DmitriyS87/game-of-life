@@ -1,96 +1,99 @@
-const cordToKey = (x, y) => `${x}:${y}`;
-const keyToCoords = (key) => key.split(":").map(Number);
-const roundToDecimal = (num, dec = 1) =>
-  Math.round(num * 10 ** dec) / 10 ** dec;
-const fixBorderCoords = (x, min = 0, max) => {
-  if (x < min) {
-    return max + x;
-  }
-  if (x >= max) {
-    return x - max;
-  }
-  return x;
+const getUnitArrayIndex = (x, y, size) => y * size + x;
+const getCordsByUnitIndex = (idx, size) => {
+  const x = idx % size;
+  return [x, (idx - x) / size];
 };
-
-const getNeighborsCoords = (x, y, maxX, maxY) => {
+const mod = (x, size) => ((x % size) + size) % size;
+const getNeighborsCords = (x, y) => {
   const result = [];
-  [-1, 0, 1].forEach((i) => {
-    [-1, 0, 1].forEach((j) => {
-      if (!(i === 0 && j === 0)) {
-        result.push(
-          `${fixBorderCoords(Number(x) + i, 0, maxX)}:${fixBorderCoords(
-            Number(y) + j,
-            0,
-            maxY
-          )}`
-        );
-      }
-    });
-  });
-  return result;
-};
-const countNeighbors = (coordsSet, gameBoardSize) => {
-  const result = new Map();
-  coordsSet.forEach((coords) => {
-    const [x, y] = keyToCoords(coords);
-    const neighbors = getNeighborsCoords(x, y, gameBoardSize.width, gameBoardSize.height);
-
-    neighbors.forEach((coords) => {
-      if (!result.has(coords)) {
-        result.set(coords, 0);
-      }
-      result.set(coords, result.get(coords) + 1);
-    });
+  const targets = [
+    [-1, -1],
+    [0, -1],
+    [1, -1],
+    [-1, 0],
+    [1, 0],
+    [-1, 1],
+    [0, 1],
+    [1, 1],
+  ];
+  targets.forEach(([dx, dy]) => {
+    result.push([x + dx, y + dy]);
   });
   return result;
 };
 
+const countNextState = (stateMatrix, { width, height }) => {
+  const newStateMatrix = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let aliveNeighbors = 0;
+      const neighbors = getNeighborsCords(x, y, width);
+      neighbors.forEach(([x, y]) => {
+        const torX = mod(x, width);
+        const torY = mod(y, height);
+        const isAlive = stateMatrix[getUnitArrayIndex(torX, torY, width)] === 1;
+        if (isAlive) {
+          aliveNeighbors++;
+        }
+      });
 
-const calculateNextScene = ({oldAliveSet, gameBoardSize, rules}) => {
-  let coordsToHide = null;
-  let coordsToRender = null;
+      const current = stateMatrix[getUnitArrayIndex(x, y, width)];
+      let newState = 0;
+      if (current === 1) {
+        if (aliveNeighbors === 2 || aliveNeighbors === 3) {
+          newState = 1;
+        }
+      } else if (aliveNeighbors == 3) {
+        newState = 1;
+      }
+      newStateMatrix[getUnitArrayIndex(x, y, width)] = newState;
+    }
+  }
 
-  const newAliveCoords = new Set();
-  const survivedCoords = new Set();
-  let deadCoords = new Set();
+  return newStateMatrix;
+};
 
-  const countedNeighbors = countNeighbors(oldAliveSet, gameBoardSize);
-
-  countedNeighbors.forEach((count, coords) => {
-    const isAlive = oldAliveSet.has(coords);
-    if (isAlive) {
-      oldAliveSet.delete(coords);
-      const { maxAlive, minAlive } = rules[1];
-      if (count >= minAlive && count <= maxAlive) {
-        survivedCoords.add(coords);
+const countNextRenderChanges = (oldState, newState, size) => {
+  const changedFields = [];
+  for (let idx = 0; idx < newState.length; idx++) {
+    const [x, y] = getCordsByUnitIndex(idx, size);
+    if (newState[idx] === 1) {
+      if (oldState[idx] !== 1) {
+        changedFields.push({ x, y, state: 1 });
       } else {
-        deadCoords.add(coords);
+        changedFields.push({ x, y, state: 1 });
       }
     } else {
-      const { aliveMinCount } = rules[0];
-      if (count === aliveMinCount) {
-        newAliveCoords.add(coords);
+      if (oldState[idx] === 1) {
+        changedFields.push({ x, y, state: 0 });
       }
     }
-  });
-
-  if (oldAliveSet.size) {
-    deadCoords = new Set([...deadCoords, ...oldAliveSet]);
   }
-
-  const aliveSet = new Set([...survivedCoords, ...newAliveCoords]);
-  coordsToHide = deadCoords;
-  coordsToRender = newAliveCoords;
   return {
-    coordsToHide,
-    coordsToRender,
-    aliveSet
-  }
-}
+    changedFields,
+  };
+};
+
+const calculateNextScene = ({ stateMatrix, gameBoardSize }) => {
+  const newStateMatrix = countNextState(stateMatrix, gameBoardSize);
+  const { changedFields } = countNextRenderChanges(
+    stateMatrix,
+    newStateMatrix,
+    gameBoardSize.width
+  );
+  return {
+    changedFields,
+    newStateMatrix,
+  };
+};
 
 self.onmessage = function (event) {
-  const data = event.data;
-  const result = calculateNextScene(data);
+  try {
+    const data = event.data;
+    const result = calculateNextScene(data);
 
-  self.postMessage(result);
+    self.postMessage(result);
+  } catch (e) {
+    throw new Error(`WORKER ERROR ${e}`);
+  }
 };

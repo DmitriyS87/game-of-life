@@ -1,7 +1,7 @@
 export const GAME_ALIVE_COLOR = "blue";
 export const GAME_DEAD_COLOR = "#f5f5f5";
-export const GAME_DEFAULT_AREA_SIZE_X = 20;
-export const GAME_DEFAULT_AREA_SIZE_Y = 20;
+export const GAME_DEFAULT_AREA_SIZE_X = 200;
+export const GAME_DEFAULT_AREA_SIZE_Y = 200;
 export const GAME_CANVAS_WIDTH_DEFAULT = 320;
 export const GAME_CANVAS_HEIGHT_DEFAULT = 320;
 export const BASE_UPDATE_FPS = 16;
