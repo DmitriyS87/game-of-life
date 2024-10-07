@@ -82,7 +82,7 @@ export const getRandomColor = () =>
 export const convertPerSecToMs = (v) => Math.round(1000 / v);
 export const getUnitArrayIndex = (x, y, size) => y * size + x;
 export const mod = (x, size) => ((x % size) + size) % size;
-export const getNeighborsCords = (x, y) => {
+export const getNeighborsCords = (x, y, size) => {
   const result = [];
   const targets = [
     [-1, -1],
@@ -95,7 +95,9 @@ export const getNeighborsCords = (x, y) => {
     [1, 1],
   ];
   targets.forEach(([dx, dy]) => {
-    result.push([x + dx, y + dy]);
+    const torX = mod(x + dx, size);
+    const torY = mod(y + dy, size);
+    result.push([torX, torY]);
   });
   return result;
 };

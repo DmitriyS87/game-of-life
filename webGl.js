@@ -197,11 +197,6 @@ export class WebGlCountGame {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-    // for future drawing:
-    // const temp = currentStateTexture;
-    // currentStateTexture = resultTexture;
-    // resultTexture = temp;
-
     const pixelData = new Uint8Array(x * y * 4);
     gl.readPixels(0, 0, x, y, gl.RGBA, gl.UNSIGNED_BYTE, pixelData);
 

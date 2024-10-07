@@ -9,6 +9,7 @@ import {
   getCordsByUnitIndex,
   getNeighborsCords,
   mod,
+  keyToCoords,
 } from "./utils.js";
 
 import {
@@ -74,15 +75,14 @@ export class Game {
     this.randomColor = randomColor;
 
     this.fields = {};
-    this.bgRenderMode = 0;
-    this.history = [];
-    this.currentAliveCoords = new Set();
-    this.updateSceneData = {};
+    this.cachedNeighbors = {};
     this.stateMatrix = [];
+
     this.currentGeneration = 0;
     this.generationTime = 0;
     this.aliveCount = 0;
     this.maxFps = BASE_UPDATE_FPS;
+
     this.rules = {
       0: {
         aliveMinCount: 3,
@@ -92,11 +92,6 @@ export class Game {
         maxAlive: 3,
       },
     };
-
-    this.draw.bind(this);
-    this.updateScene.bind(this);
-    this.updateGameScreen.bind(this);
-    this.renderLayer.bind(this);
   }
 
   get getGenerationInfo() {
@@ -122,11 +117,6 @@ export class Game {
     });
   }
 
-  initWorker(worker) {
-    this.worker = worker;
-    this.worker.onmessage = this.workerUpdateHandler;
-  }
-
   initCountEngine() {
     if (WebGlCountGame.isWebGLAvailable()) {
       this.webGlCalc = new WebGlCountGame({
@@ -138,8 +128,9 @@ export class Game {
 
     try {
       worker = new Worker("calcScene.js");
+      this.worker = worker;
+      this.worker.onmessage = this.workerUpdateHandler;
       this.workerCalc = true;
-      this.initWorker(worker);
     } catch (e) {
       console.warn("Worker api is not supported", e);
     }
@@ -226,43 +217,16 @@ export class Game {
     }
   }
 
-  createFields() {
-    const Field = this.Field;
-    const decimalsCount = 2;
-    const { sizeX, sizeY, width, height, randomColor } = this;
-    this._fieldWidth = Math.max(
-      roundToDecimal(width / sizeX, decimalsCount),
-      1
-    );
-    this._fieldHeight = Math.max(
-      roundToDecimal(height / sizeY, decimalsCount),
-      1
-    );
-    for (let x = 0; x < sizeX; x++) {
-      for (let y = 0; y < sizeY; y++) {
-        const positionX = roundToDecimal(x * this._fieldWidth);
-        const positionY = roundToDecimal(y * this._fieldHeight);
-        this.fields[cordToKey(x, y)] = new Field(
-          positionX,
-          positionY,
-          this._fieldWidth,
-          this._fieldHeight,
-          randomColor ? getRandomColor() : this.aliveColor
-        );
-      }
-    }
-  }
-
   createRandomFirstGeneration() {
     this.aliveCount = 0;
     this.currentGeneration = 1;
-    this.currentAliveCoords = new Set();
     this.stateMatrix = new Uint8Array(this.sizeX * this.sizeY);
+    this.changedFields = [];
     for (let y = 0; y < this.sizeY; y++) {
       for (let x = 0; x < this.sizeX; x++) {
-        if (Math.random() < 0.6 ? 0 : 1) {
+        if (Math.random() > 0.6) {
           this.stateMatrix[getUnitArrayIndex(x, y, this.sizeX)] = 1;
-          this.aliveCount++;
+          this.changedFields.push({ x, y, state: 1 });
         }
       }
     }
@@ -271,13 +235,7 @@ export class Game {
   }
 
   generateNext() {
-    const newStateMatrix = this.countNextState(this.stateMatrix, { width: this.sizeX, height: this.sizeY });
-    const { changedFields } = this.countNextRenderChanges(
-      this.stateMatrix,
-      newStateMatrix,
-      this.sizeX
-    );
-
+    const { newStateMatrix , changedFields } = this.countNextState(this.stateMatrix, { width: this.sizeX, height: this.sizeY });
     this.stateMatrix = newStateMatrix;
     this.changedFields = changedFields;
   }
@@ -298,9 +256,13 @@ export class Game {
     ctx.beginPath();
     if (this.changedFields) {
       this.changedFields.forEach(({ x, y, state }) => {
-        state === 1
-          ? this.renderCoord(cordToKey(x, y))
-          : this.clearCoord(cordToKey(x, y));
+        if (state === 1) {
+          this.renderCoord(cordToKey(x, y))
+          this.aliveCount++;
+        } else {
+          this.clearCoord(cordToKey(x, y));
+          this.aliveCount--;
+        }
       });
       this.changedFields = null;
     } else {
@@ -310,6 +272,7 @@ export class Game {
           this.renderCoord(cordToKey(x, y));
         }
       });
+      this.countAliveCount();
     }
 
     ctx.closePath();
@@ -337,7 +300,6 @@ export class Game {
       if (this.workerCalc) {
         const messageBody = {
           stateMatrix: this.stateMatrix,
-          oldAliveSet: this.currentAliveCoords,
           gameBoardSize: { width: this.sizeX, height: this.sizeY },
           rules: this.rules,
         };
@@ -352,7 +314,6 @@ export class Game {
             this.webGlCalc.countNextGeneration(this.stateMatrix);
           this.stateMatrix = newStateMatrix;
           this.changedFields = changedFields;
-          this.countAliveCount();
         });
         this.currentGeneration++;
         this.renderTime = this.countRunTime(this.renderLayer.bind(this));
@@ -379,7 +340,6 @@ export class Game {
       this.changedFields = changedFields;
       this.countAliveCount();
 
-      // this.aliveCount = this.updateSceneData.aliveSet.size;
       this.setState("play");
       this.generationTime = Date.now() - this.workerStartCount;
       this.workerStartCount = 0;
@@ -402,8 +362,6 @@ export class Game {
   reset() {
     this.clearLayer();
     this.createInitialStateMatrix();
-    this.updateSceneData = {};
-    this.currentAliveCoords = new Set();
     this.resetRuntimeCounters();
     this.updateDisplayGameInfo(this.getGenerationInfo);
   }
@@ -415,6 +373,7 @@ export class Game {
   updateSize(size) {
     this.reset();
     this.fields = {};
+    this.cachedNeighbors = {};
     this.sizeX = size;
     this.sizeY = size;
     this.createFields();
@@ -554,20 +513,27 @@ export class Game {
     this.generationTime = this.countRunTime(
       this.createRandomFirstGeneration.bind(this)
     );
-    this.countAliveCount();
+  }
+
+  getNeighborsCached(x, y, width) {
+    let cached = this.cachedNeighbors[cordToKey(x, y)];
+    if (cached === undefined) {
+      cached = this.cachedNeighbors[cordToKey(x, y)] = getNeighborsCords(x, y, width);
+    }
+    return cached
   }
 
   countNextState = (stateMatrix, { width, height }) => {
     const newStateMatrix = new Uint8Array(width * height);
+    const changedFields = [];
+
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         let aliveNeighbors = 0;
-        const neighbors = getNeighborsCords(x, y, width);
+        const neighbors = this.getNeighborsCached(x, y, width);
         neighbors.forEach(([x, y]) => {
-          const torX = mod(x, width);
-          const torY = mod(y, height);
           const isAlive =
-            stateMatrix[getUnitArrayIndex(torX, torY, width)] === 1;
+            stateMatrix[getUnitArrayIndex(x, y, width)] === 1;
           if (isAlive) {
             aliveNeighbors++;
           }
@@ -578,15 +544,21 @@ export class Game {
         if (current === 1) {
           if (aliveNeighbors === 2 || aliveNeighbors === 3) {
             newState = 1;
+          } else {
+            changedFields.push({ x, y, state: 0 });
           }
         } else if (aliveNeighbors == 3) {
           newState = 1;
+          changedFields.push({ x, y, state: 1 });
         }
         newStateMatrix[getUnitArrayIndex(x, y, width)] = newState;
       }
     }
 
-    return newStateMatrix;
+    return {
+      newStateMatrix,
+      changedFields,
+    };
   };
 
   countNextRenderChanges = (oldState, newState, size) => {
@@ -595,8 +567,6 @@ export class Game {
       const [x, y] = getCordsByUnitIndex(idx, size);
       if (newState[idx] === 1) {
         if (oldState[idx] !== 1) {
-          changedFields.push({ x, y, state: 1 });
-        } else {
           changedFields.push({ x, y, state: 1 });
         }
       } else {
@@ -610,15 +580,46 @@ export class Game {
     };
   };
 
+  createFields() {
+    this.fields = {};
+    const decimalsCount = 2;
+    const { sizeX, sizeY, width, height } = this;
+    this._fieldWidth = Math.max(
+      roundToDecimal(width / sizeX, decimalsCount),
+      1
+    );
+    this._fieldHeight = Math.max(
+      roundToDecimal(height / sizeY, decimalsCount),
+      1
+    );
+  }
+
+  cacheField(coords) {
+    const [x, y] = keyToCoords(coords);
+    const positionX = roundToDecimal(x * this._fieldWidth);
+    const positionY = roundToDecimal(y * this._fieldHeight);
+    const field = this.fields[cordToKey(x, y)] = new Field(
+      positionX,
+      positionY,
+      this._fieldWidth,
+      this._fieldHeight,
+    );
+    return field;
+  }
+
+  getField(coords) {
+    return this.fields[coords] ?? this.cacheField(coords);
+  }
+
   renderCoord(coords) {
-    const field = this.fields[coords];
+    const field = this.getField(coords);
     const { x, y } = field.renderData;
     const img = this.cachedFigure;
     this.ctx.layer.drawImage(img, x, y);
   }
 
   clearCoord(coords) {
-    const field = this.fields[coords];
+    const field = this.getField(coords);
     const { x, y, dx, dy } = field.renderData;
     this.ctx.layer.clearRect(x, y, dx, dy);
   }

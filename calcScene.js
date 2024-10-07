@@ -60,8 +60,6 @@ const countNextRenderChanges = (oldState, newState, size) => {
     if (newState[idx] === 1) {
       if (oldState[idx] !== 1) {
         changedFields.push({ x, y, state: 1 });
-      } else {
-        changedFields.push({ x, y, state: 1 });
       }
     } else {
       if (oldState[idx] === 1) {
