@@ -1,4 +1,4 @@
-import { initControlPanel } from "./controlPannel.js";
+import { initControlPanel } from "./controlPanel.js";
 import { initGame } from "./game.js";
 
 const init = () => {
