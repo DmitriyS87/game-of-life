@@ -50,7 +50,7 @@ export const enableElement = (el) => {
   el.removeAttribute("disabled");
 };
 export const printTextToEl = (text, el) => {
-  el.innerText = text;
+  el.innerText = text ?? '';
 };
 export const parseRGBaCords = (arrU8, size) => {
   const result = [];
@@ -80,3 +80,26 @@ export const getRandomColor = () =>
     Math.random() * 255
   )}, ${Math.round(Math.random() * 255)})`;
 export const convertPerSecToMs = (v) => Math.round(1000 / v);
+export const getUnitArrayIndex = (x, y, size) => y * size + x;
+export const mod = (x, size) => ((x % size) + size) % size;
+export const getNeighborsCords = (x, y) => {
+  const result = [];
+  const targets = [
+    [-1, -1],
+    [0, -1],
+    [1, -1],
+    [-1, 0],
+    [1, 0],
+    [-1, 1],
+    [0, 1],
+    [1, 1],
+  ];
+  targets.forEach((dx, dy) => {
+    result.push([x + dx], [y + dy]);
+  });
+  return result;
+};
+export const getCordsByUnitIndex = (idx, size) => {
+  const x = idx % size;
+  return [x, (idx - x) / size]
+}

@@ -64,7 +64,7 @@ body {
   flex-direction: column;
   min-width: 280px;
   padding: 16px 12px;
-  gap: 16px;
+  gap: 12px;
 }
 .game__screen {
   display: flex;

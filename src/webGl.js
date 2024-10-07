@@ -1,4 +1,4 @@
-import { keyToCoords, parseRGBaCords } from "./utils.js";
+import { cordToKey, getCordsByUnitIndex, parseRGBaCords } from "./utils.js";
 
 const vertexShaderCode = `
 attribute vec2 a_position;
@@ -138,7 +138,7 @@ export class WebGlCountGame {
     WebGlCountGame.instance = this;
     this.size = size;
 
-    this.countAliveSet.bind(this);
+    this.countNextGeneration.bind(this);
     this.renderToCanvas.bind(this);
     this.countNextState.bind(this);
     this.updateSize.bind(this);
@@ -197,6 +197,7 @@ export class WebGlCountGame {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
+    // for future drawing:
     // const temp = currentStateTexture;
     // currentStateTexture = resultTexture;
     // resultTexture = temp;
@@ -204,42 +205,49 @@ export class WebGlCountGame {
     const pixelData = new Uint8Array(x * y * 4);
     gl.readPixels(0, 0, x, y, gl.RGBA, gl.UNSIGNED_BYTE, pixelData);
 
-    const newSet = new Set();
-    for (let i = 0; i < pixelData.length; i += 4) {
-      const nX = (i / 4) % x;
-      const nY = Math.floor(i / 4 / y);
-      if (pixelData[i] > 128) {
-        newSet.add(`${nX}:${nY}`);
-      }
-    }
-
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.renderToCanvas(currentStateTexture);
     currentStateTexture = null;
     resultTexture = null;
-    return { newSet };
+    return { pixelData };
   }
 
-  countAliveSet(aliveSet) {
+  countNextGeneration(stateMatrix) {
     const { gl, size } = this;
     const stateArray = new Uint8Array(size.x * size.y * 4);
 
-    aliveSet.forEach((cords) => {
-      const [x, y] = keyToCoords(cords);
-      const index = (y * this.size.x + x) * 4;
-      stateArray[index] = 255;
-      stateArray[index + 1] = 0;
-      stateArray[index + 2] = 0;
-      stateArray[index + 3] = 255;
+    stateMatrix.forEach((val, idx) => {
+        const idx4 = idx * 4;
+        stateArray[idx4] = val === 1 ? 255 : 0;
+        stateArray[idx4 + 1] = 0;
+        stateArray[idx4 + 2] = 0;
+        stateArray[idx4 + 3] = 255;
     });
 
-    const { newSet } = this.countNextState(
+    const { pixelData } = this.countNextState(
       gl,
       this.frameBuffer,
       size,
       stateArray
     );
-    return newSet;
+    const changedFields = [];
+    const newStateMatrix = new Uint8Array(size.x * size.y);
+    for (let idx = 0; idx < pixelData.length; idx += 4) {
+      const stateIdx = idx/4;
+      const [x, y] = getCordsByUnitIndex(stateIdx, size.x)
+      if (pixelData[idx] > 128) {
+        newStateMatrix[stateIdx] = 1;
+        if (stateMatrix[stateIdx] !== 1) {
+          changedFields.push({x, y, state: 1})
+        } 
+      } else {
+        if (stateMatrix[stateIdx] === 1) {
+          changedFields.push({x, y, state: 0})
+        }
+      }
+    }
+
+    return {newStateMatrix, changedFields};
   }
 
   renderToCanvas(texture) {
