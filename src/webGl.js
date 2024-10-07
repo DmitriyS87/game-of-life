@@ -122,14 +122,12 @@ const bindFrameBuffer = (gl, framebuffer, resultTexture) => {
 
 export class WebGlCountGame {
   static isWebGLAvailable() {
-    return false;
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
     if (!gl) {
-        console.log("WebGL is not supported in your browser.");
+        console.warn("WebGL is not supported in your browser.");
         return false;
     }
-    console.log("WebGL is supported.");
     return true;
   }
 
@@ -137,11 +135,9 @@ export class WebGlCountGame {
     if (WebGlCountGame.instance) {
       return WebGlCountGame.instance;
     }
-    console.log('WebGlCountGame');
     WebGlCountGame.instance = this;
     this.size = size;
 
-    // ! check binds for unnecessary
     this.countAliveSet.bind(this);
     this.renderToCanvas.bind(this);
     this.countNextState.bind(this);

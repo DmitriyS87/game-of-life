@@ -30,7 +30,7 @@ let worker = null;
 try {
   worker = new Worker("calcScene.js");
 } catch (e) {
-  console.log("Worker api is not supported", e);
+  console.warn("Worker api is not supported", e);
 }
 
 const getNeighborsCoords = (x, y, maxX, maxY) => {
@@ -173,7 +173,6 @@ export class Game {
 
   initEventListeners() {
     document.addEventListener("life-game-event-controls", (e) => {
-      console.log(e)
       e.stopPropagation();
       switch (e?.detail?.action) {
         case "start":
@@ -252,7 +251,6 @@ export class Game {
   initWorker(worker) {
     this.worker = worker;
     this.worker.onmessage = this.workerUpdateHandler;
-    console.log('WORKER HERE!!!');
   }
 
   initCountEngine() {
@@ -278,7 +276,6 @@ export class Game {
   }
 
   init() {
-    console.log(this)
     this.createCanvas();
     this.initCountEngine();
     this.createFields();
@@ -630,7 +627,6 @@ export class Game {
     this.sizeY = size;
     this.createFields();
     this.reloadCountEngine();
-    console.log('GOT IT ', size)
   }
 
   sendInitEvent(data) {

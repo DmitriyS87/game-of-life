@@ -81,7 +81,6 @@ const calculateNextScene = ({oldAliveSet, gameBoardSize, rules}) => {
   const aliveSet = new Set([...survivedCoords, ...newAliveCoords]);
   coordsToHide = deadCoords;
   coordsToRender = newAliveCoords;
-  console.log("WORKER::: Calculated:", aliveSet.size);
   return {
     coordsToHide,
     coordsToRender,
@@ -91,7 +90,6 @@ const calculateNextScene = ({oldAliveSet, gameBoardSize, rules}) => {
 
 self.onmessage = function (event) {
   const data = event.data;
-  console.log("WORKER::: alive:", event.data.oldAliveSet.size)
   const result = calculateNextScene(data);
 
   self.postMessage(result);
