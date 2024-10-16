@@ -103,6 +103,7 @@ export class Game {
 
   init() {
     this.createInitialStateMatrix();
+    this.setCanvasSize();
     this.createCanvas();
     this.initCountEngine();
     this.createFields();
@@ -134,28 +135,38 @@ export class Game {
     }
   }
 
-  createCanvas() {
+  setCanvasSize() {
     this._$container = document.querySelector(this.container);
     const { width, height } = this._$container.getBoundingClientRect();
     const gameWidth = Math.max(width, this.defaultCanvasSize.width) - 6;
     const gameHeight = Math.max(height, this.defaultCanvasSize.height) - 6;
     const rectSize = Math.min(gameWidth, gameHeight);
+    this.width = rectSize;
+    this.height = rectSize;
+  }
+
+  updateGameScreenSize() {
+    this.clear();
+    this.bgCanvas.width = this.layerCanvas.width = this.width;
+    this.bgCanvas.height = this.layerCanvas.height = this.height;
+  }
+
+  createCanvas() {
+    this._$container = document.querySelector(this.container);
     this.bgCanvas = this.createCanvasElement({
       cn: "game-background",
     });
     this.layerCanvas = this.createCanvasElement({
       cn: "game-layer",
     });
-    this.bgCanvas.width = this.layerCanvas.width = rectSize;
-    this.bgCanvas.height = this.layerCanvas.height = rectSize;
+    this.bgCanvas.width = this.layerCanvas.width = this.width;
+    this.bgCanvas.height = this.layerCanvas.height = this.height;
     this.ctx = {
       bg: this.bgCanvas.getContext("2d", { alpha: false }),
       layer: this.layerCanvas.getContext("2d"),
     };
     this.ctx.bg.imageSmoothingEnabled = false;
     this.ctx.layer.imageSmoothingEnabled = false;
-    this.width = this.layerCanvas.width;
-    this.height = this.layerCanvas.height;
   }
 
   createInitialStateMatrix() {
