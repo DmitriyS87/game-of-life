@@ -4,7 +4,7 @@ const getCordsByUnitIndex = (idx, size) => {
   return [x, (idx - x) / size];
 };
 const mod = (x, size) => ((x % size) + size) % size;
-const getNeighborsCords = (x, y) => {
+export const getNeighborsCords = (x, y, size) => {
   const result = [];
   const targets = [
     [-1, -1],
@@ -17,7 +17,9 @@ const getNeighborsCords = (x, y) => {
     [1, 1],
   ];
   targets.forEach(([dx, dy]) => {
-    result.push([x + dx, y + dy]);
+    const torX = mod(x + dx, size);
+    const torY = mod(y + dy, size);
+    result.push([torX, torY]);
   });
   return result;
 };
@@ -29,9 +31,7 @@ const countNextState = (stateMatrix, { width, height }) => {
       let aliveNeighbors = 0;
       const neighbors = getNeighborsCords(x, y, width);
       neighbors.forEach(([x, y]) => {
-        const torX = mod(x, width);
-        const torY = mod(y, height);
-        const isAlive = stateMatrix[getUnitArrayIndex(torX, torY, width)] === 1;
+        const isAlive = stateMatrix[getUnitArrayIndex(x, y, width)] === 1;
         if (isAlive) {
           aliveNeighbors++;
         }

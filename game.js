@@ -3,12 +3,10 @@ import {
   cordToKey,
   roundToDecimal,
   noOftenThan,
-  getRandomColor,
   convertPerSecToMs,
   getUnitArrayIndex,
   getCordsByUnitIndex,
   getNeighborsCords,
-  mod,
   keyToCoords,
 } from "./utils.js";
 
