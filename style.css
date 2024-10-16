@@ -42,12 +42,10 @@ body {
 .layout {
   width: 100%;
   height: 100%;
-  padding: 10px;
   display: flex;
 }
 
 .game {
-  border-radius: 16px;
   background: #444857;
   box-shadow: 2px 6px 20px 0 #616161;
   display: flex;
@@ -229,7 +227,11 @@ body {
 }
 
 @media screen and (min-width: 768px) {
+  .layout {
+    padding: 10px;
+  }
   .game {
+    border-radius: 16px;
     flex-grow: 0;
     flex-wrap: nowrap;
     flex-shrink: 0;
